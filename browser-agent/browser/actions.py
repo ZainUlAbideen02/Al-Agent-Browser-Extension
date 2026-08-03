@@ -24,18 +24,17 @@ def execute_action(
     logger.info(f"Executing Action: '{action_type}' | Selector: '{selector}' | Coords: ({x}, {y}) | Text: '{text}' | Value: '{value}'")
 
     try:
-        if action_type == "click":
-            # If explicit (x, y) coordinates are provided by Vision model
-            if x is not None and y is not None:
-                controller.click_coordinate(int(x), int(y))
-                time.sleep(1)
-                return {
-                    "success": True,
-                    "error_type": None,
-                    "message": f"Successfully clicked pixel coordinates ({x}, {y}).",
-                    "stale_element": False
-                }
+        if action_type in ("click_coordinate", "click") and (x is not None and y is not None):
+            controller.click_coordinate(int(x), int(y))
+            time.sleep(1)
+            return {
+                "success": True,
+                "error_type": None,
+                "message": f"Successfully clicked pixel coordinates ({x}, {y}).",
+                "stale_element": False
+            }
 
+        elif action_type == "click":
             if not selector:
                 return {
                     "success": False,

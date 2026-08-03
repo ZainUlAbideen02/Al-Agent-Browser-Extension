@@ -7,8 +7,8 @@ logger = logging.getLogger("browser_agent.agent.reasoner")
 
 class ActionDecision(BaseModel):
     """Pydantic schema for structured action decision output from LLM."""
-    action: Literal["click", "type", "select", "scroll", "wait", "done"] = Field(
-        description="The action type to perform. Must be one of: click, type, select, scroll, wait, done."
+    action: Literal["click", "click_coordinate", "type", "select", "scroll", "wait", "done"] = Field(
+        description="The action type to perform. Must be one of: click, click_coordinate, type, select, scroll, wait, done."
     )
     selector: Optional[str] = Field(
         default=None,
@@ -16,11 +16,11 @@ class ActionDecision(BaseModel):
     )
     x: Optional[int] = Field(
         default=None,
-        description="Optional X pixel coordinate for visual click on canvas or un-indexed image."
+        description="Optional X pixel coordinate for visual click on canvas or non-DOM element."
     )
     y: Optional[int] = Field(
         default=None,
-        description="Optional Y pixel coordinate for visual click on canvas or un-indexed image."
+        description="Optional Y pixel coordinate for visual click on canvas or non-DOM element."
     )
     text: Optional[str] = Field(
         default=None,
@@ -37,12 +37,13 @@ class ActionDecision(BaseModel):
 SYSTEM_PROMPT_DOM = """You are an AI web automation agent. Your goal is to complete a user task on a web page by taking one step at a time.
 
 Available Actions:
-1. "click": Click an interactive element specified by its 'selector' (use for buttons, links, non-native custom dropdowns, canvas).
-2. "type": Focus an element specified by its 'selector' and type the specified 'text'.
-3. "select": Choose an option from a native HTML <select> element by specifying its 'selector' and option label/value in 'value' (e.g. selector: "#dropdown", value: "Option 2").
-4. "scroll": Scroll the page down or up (selector can be "down" or "up").
-5. "wait": Pause briefly (2 seconds) to allow dynamic contents or search results to load.
-6. "done": Declare that the objective has been successfully completed.
+1. "click": Click an interactive element specified by its 'selector' (use for buttons, links, non-native custom dropdowns).
+2. "click_coordinate": Click at specific (x, y) pixel coordinates (specify integer 'x' and 'y' fields).
+3. "type": Focus an element specified by its 'selector' and type the specified 'text'.
+4. "select": Choose an option from a native HTML <select> element by specifying its 'selector' and option label/value in 'value' (e.g. selector: "#dropdown", value: "Option 2").
+5. "scroll": Scroll the page down or up (selector can be "down" or "up").
+6. "wait": Pause briefly (2 seconds) to allow dynamic contents or search results to load.
+7. "done": Declare that the objective has been successfully completed.
 
 Rules:
 - For native HTML <select> dropdown elements, ALWAYS use the "select" action with the target option label/value in 'value'. Do NOT try to click options inside a select dropdown.
@@ -50,8 +51,10 @@ Rules:
 - If the goal is satisfied, choose "done".
 - Output strictly valid JSON matching this schema:
 {
-  "action": "click" | "type" | "select" | "scroll" | "wait" | "done",
+  "action": "click" | "click_coordinate" | "type" | "select" | "scroll" | "wait" | "done",
   "selector": "<exact locator string or null>",
+  "x": null,
+  "y": null,
   "text": "<text to enter if action is type else null>",
   "value": "<option value/label to choose if action is select else null>",
   "reasoning": "<short sentence explaining why>"
@@ -158,13 +161,14 @@ Action Failure Reason: "{failure_reason}"
 Your Objective:
 Examine the visual screenshot of the page carefully.
 1. Identify the target element visually (e.g., look for buttons, canvas elements, links, or text).
-2. For canvas elements like '#canvasB', identify the correct canvas selector (e.g. '#canvasB') matching the target label visually ("CLICK ME TO WIN - TARGET").
-3. Output strictly valid JSON matching this schema:
+2. If the target element has a clear CSS selector in DOM (e.g. '#canvasB'), specify "action": "click" and "selector": "#canvasB".
+3. If the element is drawn inside a canvas or lacks a valid DOM selector, output "action": "click_coordinate" with integer pixel coordinates 'x' and 'y' (e.g. x: 160, y: 55).
+4. Output strictly valid JSON matching this schema:
 {{
-  "action": "click",
-  "selector": "#canvasB",
-  "x": null,
-  "y": null,
+  "action": "click" or "click_coordinate",
+  "selector": "#canvasB" or null,
+  "x": 160 or null,
+  "y": 55 or null,
   "text": null,
   "value": null,
   "reasoning": "<short explanation based on visual analysis of the screenshot>"

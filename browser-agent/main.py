@@ -1,105 +1,71 @@
 import os
 import sys
 import json
-import argparse
+import time
+import uuid
 import logging
+import argparse
+import base64
 from pathlib import Path
+from typing import Dict, Any, Optional, Callable
 
 # Add project root to python path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Ensure UTF-8 output encoding for Windows terminal compatibility
+# Ensure UTF-8 output encoding on Windows terminal
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from config.settings import validate_config
+from config.settings import check_api_key, validate_config
 from browser.controller import BrowserController
-from browser.perception import get_page_state
+from browser.perception import DOMPerception
 from browser.actions import execute_action
 from agent.reasoner import ReasonerAgent
 from agent.memory import StepMemory
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S"
+)
 logger = logging.getLogger("browser_agent.main")
-
-def setup_logging():
-    """Configure system logging."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S"
-    )
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Browser Agent - AI Browser Automation with Vision Fallback & Safety Guards."
-    )
-    parser.add_argument(
-        "--goal",
-        type=str,
-        required=True,
-        help="Task goal description for the agent."
-    )
-    parser.add_argument(
-        "--url",
-        type=str,
-        required=True,
-        help="Starting URL to navigate to."
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=15,
-        help="Maximum number of steps allowed (default: 15)."
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        default=False,
-        help="Run browser in headless mode (default: False / headed mode)."
-    )
-    parser.add_argument(
-        "--no-vision",
-        action="store_true",
-        default=False,
-        help="Disable Vision Fallback (Pure DOM ablation mode)."
-    )
-    return parser.parse_args()
 
 def run_agent(
     goal: str,
     url: str,
     max_steps: int = 15,
     headless: bool = False,
-    disable_vision: bool = False
-) -> dict:
+    disable_vision: bool = False,
+    task_id: Optional[str] = None,
+    step_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+) -> Dict[str, Any]:
     """
-    Run browser agent task loop and return execution summary data.
+    Main entry point executing browser agent control loop.
+    Supports real-time telemetry step callbacks for FastAPI WebSocket server.
     """
-    setup_logging()
+    check_api_key()
 
-    mode_str = "Pure DOM (Ablation)" if disable_vision else "Hybrid DOM + Vision Fallback"
+    active_task_id = task_id or str(uuid.uuid4())[:8]
+    logs_dir = Path(__file__).resolve().parent / "logs"
+    os.makedirs(logs_dir, exist_ok=True)
+
+    mode_label = "Pure DOM (Ablation)" if disable_vision else "Hybrid DOM + Vision Fallback"
     print("\n" + "=" * 60)
-    print(f"🤖 BROWSER AGENT INITIALIZED ({mode_str})")
+    print(f"🤖 BROWSER AGENT INITIALIZED ({mode_label})")
     print(f"🎯 Goal: {goal}")
     print(f"🌐 Starting URL: {url}")
     print(f"⚙️  Max Steps: {max_steps} | Headless: {headless} | Vision Disabled: {disable_vision}")
     print("=" * 60 + "\n")
 
-    if not validate_config():
-        print("⚠️ Warning: GROQ_API_KEY is not configured in .env or environment.\n")
-
-    logs_dir = "logs"
-    os.makedirs(logs_dir, exist_ok=True)
-
-    controller = BrowserController()
-    memory = StepMemory()
+    controller = BrowserController(default_timeout_ms=20000)
+    perception = DOMPerception()
     reasoner = ReasonerAgent()
+    memory = StepMemory()
 
-    status_summary = "Incomplete"
-    consecutive_failures = 0
+    final_status = "In progress"
 
     try:
         controller.start(headless=headless)
@@ -107,130 +73,163 @@ def run_agent(
 
         for step in range(1, max_steps + 1):
             print(f"\n--- [STEP {step}/{max_steps}] ---")
-            
-            # 1. Perception
-            page_state = get_page_state(controller, step_num=step, log_dir=logs_dir)
+
+            screenshot_name = f"step_{step}.png"
+            screenshot_path = str(logs_dir / screenshot_name)
+            page_state = perception.extract_state(controller.page, screenshot_path)
+
             print(f"📍 Page URL: {page_state['url']}")
             print(f"📄 Page Title: {page_state['title']}")
-            print(f"📸 Screenshot saved: {page_state['screenshot_path']}")
+            print(f"📸 Screenshot saved: {screenshot_path}")
 
-            history_summary = memory.format_history(max_steps=5)
+            history_summary = memory.get_summary()
             used_vision = False
 
-            # 2. Reasoner (Switch to Vision Fallback if 2+ consecutive failures occurred AND vision is enabled)
-            if consecutive_failures >= 2 and not disable_vision:
-                print("👁️ Vision Fallback Triggered (2 consecutive action failures on selector). Analyzing screenshot...")
-                used_vision = True
-                failure_msg = f"Action execution failed {consecutive_failures} times in a row."
+            # Evaluate Vision Fallback triggers
+            trigger_vision = not disable_vision and (
+                memory.should_trigger_vision_fallback() or memory.is_looping()
+            )
+
+            if trigger_vision:
+                print("👁️ Vision Fallback Triggered (2 consecutive action failures or loop guard). Analyzing screenshot...")
                 try:
-                    action_dict = reasoner.decide_with_vision(
+                    action_decision = reasoner.decide_with_vision(
                         goal=goal,
                         page_state=page_state,
                         history_summary=history_summary,
-                        failure_reason=failure_msg
+                        failure_reason="DOM selector failed or stuck in loop"
                     )
+                    used_vision = True
                 except Exception as ve:
-                    print(f"⚠️ Vision Fallback call failed ({ve}). Falling back to DOM decision...")
-                    action_dict = reasoner.decide_next_action(goal, page_state, history_summary)
+                    logger.warning(f"Vision Fallback call failed ({ve}). Falling back to DOM decision...")
+                    print("🧠 Thinking next action via DOM perception...")
+                    action_decision = reasoner.decide_next_action(
+                        goal=goal,
+                        page_state=page_state,
+                        history_summary=history_summary
+                    )
             else:
-                if consecutive_failures >= 2 and disable_vision:
-                    print("⚠️ Vision Fallback bypassed (Pure DOM Ablation Mode enabled).")
                 print("🧠 Thinking next action via DOM perception...")
-                action_dict = reasoner.decide_next_action(goal, page_state, history_summary)
+                action_decision = reasoner.decide_next_action(
+                    goal=goal,
+                    page_state=page_state,
+                    history_summary=history_summary
+                )
 
-            action_type = action_dict.get("action")
-            reasoning = action_dict.get("reasoning", "")
-            selector = action_dict.get("selector")
-            text = action_dict.get("text")
+            action_type = action_decision.get("action")
+            selector = action_decision.get("selector")
+            reasoning = action_decision.get("reasoning")
 
             print(f"💡 Reasoning: {reasoning}")
-            print(f"⚡ Action Chosen: {action_type} (Selector: '{selector}', Text: '{text}') [Vision={used_vision}]")
+            print(f"⚡ Action Chosen: {action_type} (Selector: '{selector}', Text: '{action_decision.get('text')}') [Vision={used_vision}]")
 
-            # Check if complete
-            if action_type == "done":
-                print(f"\n✅ TASK COMPLETED! Reason: {reasoning}")
-                status_summary = f"Completed successfully: {reasoning}"
-                memory.add_step(
-                    step, action_dict, {"success": True, "message": "Done"},
-                    page_state['screenshot_path'], used_vision_fallback=used_vision,
-                    page_url=page_state['url'], page_title=page_state['title']
-                )
-                break
+            # Execute action via Playwright
+            result = execute_action(controller, action_decision)
 
-            # 3. Action Execution
-            result = execute_action(controller, action_dict)
-            success = result.get("success", False)
-            print(f"📌 Action Output: {'SUCCESS' if success else 'FAILED'} - {result.get('message')}")
-
-            if success:
-                consecutive_failures = 0
+            if result.get("success"):
+                print(f"📌 Action Output: SUCCESS - {result.get('message')}")
             else:
-                consecutive_failures += 1
-                logger.warning(f"Action failed! Consecutive failure count: {consecutive_failures}")
+                print(f"📌 Action Output: FAILED - {result.get('message')}")
 
-            # 4. Memory Recording
-            memory.add_step(
+            # Record step entry in memory
+            memory.record_step(
                 step_num=step,
-                action_taken=action_dict,
+                action_taken=action_decision,
                 result=result,
-                screenshot_path=page_state['screenshot_path'],
-                used_vision_fallback=used_vision,
-                page_url=page_state['url'],
-                page_title=page_state['title']
+                screenshot_path=screenshot_path,
+                page_state=page_state,
+                used_vision_fallback=used_vision
             )
 
-            # 5. Strengthened Loop Detection & Progress Check
-            loop_check = memory.is_looping(repeat_threshold=3)
-            if loop_check["is_looping"]:
-                print(f"\n⚠️ LOOP GUARD TRIGGERED! {loop_check['reason']}")
-                if not used_vision and not disable_vision:
-                    print("🔄 Forcing Vision Fallback on next step to break loop...")
-                    consecutive_failures = 2  # Force vision on next iteration
-                else:
-                    print("🛑 Agent remains stuck even after Vision / Pure DOM. Terminating task cleanly with 'stuck' status.")
-                    status_summary = f"Stuck: {loop_check['reason']}"
+            # Trigger step callback for real-time WebSocket telemetry if provided
+            if step_callback:
+                try:
+                    img_base64 = ""
+                    if Path(screenshot_path).exists():
+                        with open(screenshot_path, "rb") as f:
+                            img_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+                    frame_data = {
+                        "task_id": active_task_id,
+                        "step_num": step,
+                        "action": action_type,
+                        "selector": selector,
+                        "x": action_decision.get("x"),
+                        "y": action_decision.get("y"),
+                        "reasoning": reasoning,
+                        "success": result.get("success"),
+                        "used_vision": used_vision,
+                        "page_url": page_state.get("url"),
+                        "page_title": page_state.get("title"),
+                        "screenshot_base64": f"data:image/png;base64,{img_base64}" if img_base64 else ""
+                    }
+                    step_callback(frame_data)
+                except Exception as cb_err:
+                    logger.warning(f"Telemetry step_callback failed: {cb_err}")
+
+            if action_type == "done":
+                final_status = f"Completed successfully: {reasoning}"
+                print(f"\n✅ TASK COMPLETED! Reason: {reasoning}")
+                break
+
+            if memory.is_looping() and not trigger_vision:
+                print("\n⚠️ LOOP GUARD TRIGGERED! Action repeated 3 times with zero page progress. Agent is stuck.")
+                if disable_vision:
+                    final_status = f"Stuck: Action {action_type} on '{selector}' repeated 3 times with zero page progress."
+                    print("🛑 Agent remains stuck (Pure DOM mode). Terminating task cleanly.")
                     break
+                else:
+                    print("🔄 Forcing Vision Fallback on next step to break loop...")
 
         else:
+            final_status = f"Reached maximum steps limit ({max_steps})."
             print(f"\n⌛ MAX STEPS ({max_steps}) REACHED without declaring 'done'.")
-            status_summary = f"Reached maximum steps limit ({max_steps})."
 
     except Exception as e:
-        print(f"\n❌ Error during agent execution: {e}")
-        status_summary = f"Failed with exception: {e}"
+        logger.error(f"Fatal error during execution loop: {e}")
+        final_status = f"Failed with exception: {e}"
+        print(f"\n❌ Execution Error: {e}")
 
     finally:
         controller.close()
 
-    # Final Log & Summary
-    stats = memory.get_summary_stats()
     summary_data = {
+        "task_id": active_task_id,
         "goal": goal,
         "start_url": url,
-        "mode": "pure_dom" if disable_vision else "hybrid",
-        "final_status": status_summary,
-        "total_steps": stats["total_steps"],
-        "pure_dom_steps": stats["pure_dom_steps"],
-        "vision_fallback_steps": stats["vision_fallback_steps"],
-        "vision_fallback_ratio": stats["vision_fallback_ratio"],
+        "mode": "dom" if disable_vision else "hybrid",
+        "final_status": final_status,
+        "total_steps": len(memory.history),
+        "pure_dom_steps": len(memory.history) - memory.vision_fallback_count,
+        "vision_fallback_steps": memory.vision_fallback_count,
+        "vision_fallback_ratio": round(memory.vision_fallback_count / max(1, len(memory.history)), 2),
         "history": memory.history
     }
 
-    summary_file = os.path.join(logs_dir, "run_summary.json")
+    summary_file = logs_dir / "run_summary.json"
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
 
     print("\n" + "=" * 60)
     print("📊 EXECUTION SUMMARY")
-    print(f"Status: {status_summary}")
-    print(f"Total Steps Taken: {stats['total_steps']}")
-    print(f"Pure DOM Steps: {stats['pure_dom_steps']} | Vision Fallback Steps: {stats['vision_fallback_steps']}")
+    print(f"Status: {final_status}")
+    print(f"Total Steps Taken: {len(memory.history)}")
+    print(f"Pure DOM Steps: {summary_data['pure_dom_steps']} | Vision Fallback Steps: {summary_data['vision_fallback_steps']}")
     print(f"Detailed Log Exported: {summary_file}")
     print("=" * 60 + "\n")
 
     return summary_data
 
-def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Browser Agent CLI Runner")
+    parser.add_argument("--goal", type=str, required=True, help="Natural language objective for the agent")
+    parser.add_argument("--url", type=str, required=True, help="Initial target web page URL")
+    parser.add_argument("--max-steps", type=int, default=15, help="Maximum execution steps allowed (default: 15)")
+    parser.add_argument("--headless", action="store_true", default=False, help="Run browser in headless mode")
+    parser.add_argument("--no-vision", action="store_true", default=False, help="Disable Vision Fallback (Pure-DOM mode)")
+    return parser.parse_args()
+
+if __name__ == "__main__":
     args = parse_args()
     run_agent(
         goal=args.goal,
@@ -239,6 +238,3 @@ def main():
         headless=args.headless,
         disable_vision=args.no_vision
     )
-
-if __name__ == "__main__":
-    main()

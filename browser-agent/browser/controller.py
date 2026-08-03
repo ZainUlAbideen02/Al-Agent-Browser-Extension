@@ -1,3 +1,4 @@
+import time
 import logging
 from typing import Optional
 from playwright.sync_api import sync_playwright, Playwright, Browser, Page, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
@@ -39,13 +40,24 @@ class BrowserController:
         self._page.set_default_navigation_timeout(self.default_timeout_ms)
         logger.info("Browser session initialized.")
 
-    def goto(self, url: str, timeout: Optional[int] = None) -> None:
-        """Navigate browser to specified URL with timeout guard."""
+    def goto(self, url: str, timeout: Optional[int] = None, max_retries: int = 3) -> None:
+        """Navigate browser to specified URL with exponential backoff network retry guard."""
         timeout_ms = timeout or self.default_timeout_ms
         if not url.startswith("http://") and not url.startswith("https://") and not url.startswith("file://"):
             url = f"https://{url}"
-        logger.info(f"Navigating to {url} (timeout={timeout_ms}ms)...")
-        self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"Navigating to {url} (Attempt {attempt}/{max_retries}, timeout={timeout_ms}ms)...")
+                self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                return
+            except PlaywrightError as pe:
+                logger.warning(f"Navigation to {url} failed on attempt {attempt}: {pe}")
+                if attempt == max_retries:
+                    raise
+                backoff_sec = 2 ** attempt
+                logger.info(f"Retrying navigation in {backoff_sec} seconds...")
+                time.sleep(backoff_sec)
 
     def _resolve_locator(self, selector: str, timeout_ms: int):
         """Try resolving selector with standard CSS or text fallback."""

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "AI Browser Agent SidePanel",
+  "version": "1.0.0",
+  "description": "Live real-time monitoring and side-panel control for Hybrid AI Browser Agent.",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "ws://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open AI Browser Agent Panel"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

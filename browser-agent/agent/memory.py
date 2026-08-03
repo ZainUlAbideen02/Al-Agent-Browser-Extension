@@ -4,124 +4,97 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger("browser_agent.agent.memory")
 
 class StepMemory:
-    """Tracks step history, vision fallback flags, and detects repetitive loops with progress tracking."""
+    """Tracks step history and guards against endless execution loops."""
 
-    def __init__(self):
+    def __init__(self, max_history: int = 10):
+        self.max_history = max_history
         self.history: List[Dict[str, Any]] = []
+        self.consecutive_failures: int = 0
+        self.vision_fallback_count: int = 0
 
-    def add_step(
+    def record_step(
         self,
         step_num: int,
         action_taken: Dict[str, Any],
         result: Dict[str, Any],
-        screenshot_path: Optional[str] = None,
-        used_vision_fallback: bool = False,
-        page_url: str = "",
-        page_title: str = ""
+        screenshot_path: str,
+        page_state: Dict[str, Any],
+        used_vision_fallback: bool = False
     ) -> None:
-        """Record step entry in history with vision fallback flag and page state snapshot."""
+        """Record step entry in history with vision usage tracking."""
+        if used_vision_fallback:
+            self.vision_fallback_count += 1
+
+        if not result.get("success", False):
+            self.consecutive_failures += 1
+        else:
+            self.consecutive_failures = 0
+
         entry = {
             "step_num": step_num,
             "action_taken": action_taken,
             "result": result,
             "screenshot_path": screenshot_path,
             "used_vision_fallback": used_vision_fallback,
-            "page_url": page_url,
-            "page_title": page_title
+            "page_url": page_state.get("url", ""),
+            "page_title": page_state.get("title", "")
         }
         self.history.append(entry)
-        logger.info(
-            f"Recorded Step {step_num}: Action={action_taken.get('action')} | "
-            f"Success={result.get('success')} | VisionFallback={used_vision_fallback}"
-        )
+        logger.info(f"Recorded Step {step_num}: Action={action_taken.get('action')} | Success={result.get('success')} | VisionFallback={used_vision_fallback}")
 
-    def format_history(self, max_steps: int = 5) -> str:
-        """Format the last `max_steps` items into a concise string for LLM prompts."""
-        if not self.history:
-            return "No previous actions taken yet."
+    def should_trigger_vision_fallback(self) -> bool:
+        """Trigger vision fallback if action execution failed 2 consecutive times."""
+        return self.consecutive_failures >= 2
 
-        recent_steps = self.history[-max_steps:]
-        formatted_lines = []
-
-        for step in recent_steps:
-            num = step["step_num"]
-            act = step["action_taken"]
-            res = step["result"]
-            vision_flag = " (via Vision Fallback)" if step.get("used_vision_fallback") else ""
-
-            action_type = act.get("action", "unknown")
-            selector = act.get("selector", "")
-            text = act.get("text", "")
-            reasoning = act.get("reasoning", "")
-            status = "SUCCESS" if res.get("success") else f"FAILED ({res.get('message', 'error')})"
-
-            desc = f"Step {num}: Action '{action_type}'{vision_flag}"
-            if selector:
-                desc += f" on '{selector}'"
-            if text:
-                desc += f" with text '{text}'"
-            desc += f" -> Status: {status}. Reason: {reasoning}"
-            formatted_lines.append(desc)
-
-        return "\n".join(formatted_lines)
-
-    def is_looping(self, repeat_threshold: int = 3) -> Dict[str, Any]:
+    def is_looping(self, window: int = 3) -> bool:
         """
-        Check if the last `repeat_threshold` steps performed identical actions
-        without making progress (page URL and title unchanged).
-
-        Returns:
-            Dict: {"is_looping": bool, "reason": str}
+        Detects if the agent is stuck performing duplicate actions on static URL/Title.
+        Ignores 'wait' actions unless 5 or more consecutive identical wait actions occur.
         """
-        if len(self.history) < repeat_threshold:
-            return {"is_looping": False, "reason": ""}
+        if len(self.history) < window:
+            return False
 
-        recent_window = self.history[-repeat_threshold:]
+        recent = self.history[-window:]
+        actions = [s["action_taken"].get("action") for s in recent]
+        selectors = [s["action_taken"].get("action_type", s["action_taken"].get("selector")) for s in recent]
+        urls = [s.get("page_url") for s in recent]
+        titles = [s.get("page_title") for s in recent]
 
-        # Extract (action, selector, text) tuples
-        action_tuples = [
-            (
-                s["action_taken"].get("action"),
-                s["action_taken"].get("selector"),
-                s["action_taken"].get("text")
-            )
-            for s in recent_window
-        ]
+        # Ignore wait actions unless at least 5 consecutive waits occur
+        if all(act == "wait" for act in actions):
+            if len(self.history) < 5:
+                return False
+            five_recent = [s["action_taken"].get("action") for s in self.history[-5:]]
+            return all(act == "wait" for act in five_recent)
 
-        first_action = action_tuples[0]
-        if first_action[0] in ("done", None):
-            return {"is_looping": False, "reason": ""}
+        # Check if same action & selector executed repeatedly with static URL and Title
+        same_action = len(set(actions)) == 1
+        same_selector = len(set(selectors)) == 1
+        same_url = len(set(urls)) == 1
+        same_title = len(set(titles)) == 1
 
-        # Check if all action tuples in recent window are identical
-        all_actions_identical = all(act == first_action for act in action_tuples)
-
-        # Check if page URL and page title remained static
-        urls = [s.get("page_url", "") for s in recent_window]
-        titles = [s.get("page_title", "") for s in recent_window]
-        no_progress = (len(set(urls)) == 1) and (len(set(titles)) == 1)
-
-        if all_actions_identical and no_progress:
-            msg = (
-                f"Action {first_action[0]} on '{first_action[1]}' repeated {repeat_threshold} times "
+        if same_action and same_selector and same_url and same_title:
+            logger.warning(
+                f"Loop Guard Triggered: Action {actions[0]} on '{selectors[0]}' repeated {window} times "
                 f"with zero page progress (URL: {urls[0]}). Agent is stuck."
             )
-            logger.warning(f"Loop Guard Triggered: {msg}")
-            return {"is_looping": True, "reason": msg}
+            return True
 
-        return {"is_looping": False, "reason": ""}
+        return False
 
-    def get_vision_fallback_count(self) -> int:
-        """Return total count of steps that required Vision Fallback."""
-        return sum(1 for step in self.history if step.get("used_vision_fallback"))
+    def get_summary(self, max_recent: int = 5) -> str:
+        """Returns string summary of last N steps for prompt context."""
+        if not self.history:
+            return "No previous steps taken."
 
-    def get_summary_stats(self) -> Dict[str, Any]:
-        """Get execution statistics."""
-        total = len(self.history)
-        vision_count = self.get_vision_fallback_count()
-        pure_dom_count = total - vision_count
-        return {
-            "total_steps": total,
-            "pure_dom_steps": pure_dom_count,
-            "vision_fallback_steps": vision_count,
-            "vision_fallback_ratio": round(vision_count / total, 2) if total > 0 else 0.0
-        }
+        recent_steps = self.history[-max_recent:]
+        formatted = []
+        for s in recent_steps:
+            act = s["action_taken"]
+            res = s["result"]
+            status = "SUCCESS" if res.get("success") else f"FAILED ({res.get('message')})"
+            vis_tag = " [Vision Fallback Used]" if s.get("used_vision_fallback") else ""
+            line = f"Step {s['step_num']}: Action='{act.get('action')}' (Selector='{act.get('selector')}', Text='{act.get('text')}') -> Status: {status}{vis_tag}"
+            formatted.append(line)
+
+        return "\n".join(formatted)

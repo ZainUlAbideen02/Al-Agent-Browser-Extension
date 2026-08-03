@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Agent Control & Telemetry Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Bar -->
+        <header class="app-header">
+            <div class="logo-container">
+                <span class="agent-icon">🤖</span>
+                <div>
+                    <h1>Browser Agent Dashboard</h1>
+                    <p class="subtitle">Hybrid DOM Perception & Multimodal Vision Fallback Control</p>
+                </div>
+            </div>
+            <div class="status-bar">
+                <div class="ws-status" id="wsStatus">
+                    <span class="status-dot disconnected" id="statusDot"></span>
+                    <span id="statusText">Disconnected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace Grid -->
+        <main class="main-grid">
+            <!-- Left Column: Control Panel & Configuration -->
+            <section class="panel control-panel">
+                <h2>🚀 Agent Control Panel</h2>
+                <form id="agentForm">
+                    <div class="form-group">
+                        <label for="targetUrl">Target Web URL</label>
+                        <input type="url" id="targetUrl" placeholder="https://books.toscrape.com/" required value="https://books.toscrape.com/">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="goal">Natural Language Objective</label>
+                        <textarea id="goal" rows="3" placeholder="Describe what the agent should accomplish..." required>Click on the 'Travel' category link and report the first book title listed.</textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mode">Perception Mode</label>
+                            <select id="mode">
+                                <option value="hybrid">Hybrid (DOM + Vision Fallback)</option>
+                                <option value="dom">Pure DOM (Ablation)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="maxSteps">Max Steps</label>
+                            <input type="number" id="maxSteps" min="1" max="30" value="10">
+                        </div>
+                    </div>
+
+                    <button type="submit" id="startBtn" class="btn btn-primary">
+                        <span>▶ Start Autonomous Agent</span>
+                    </button>
+                </form>
+
+                <!-- Active Task Stats -->
+                <div class="task-stats-card" id="taskStatsCard">
+                    <h3>📊 Active Task Status</h3>
+                    <div class="stat-row">
+                        <span class="stat-label">Task ID:</span>
+                        <span class="stat-value" id="taskIdVal">None</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">State:</span>
+                        <span class="badge badge-info" id="taskStateBadge">Idle</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Steps Completed:</span>
+                        <span class="stat-value" id="stepsVal">0 / 0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Vision Fallbacks:</span>
+                        <span class="stat-value" id="visionCountVal">0</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Middle Column: Visual Preview -->
+            <section class="panel preview-panel">
+                <div class="panel-header">
+                    <h2>📸 Live Visual Screen Stream</h2>
+                    <span class="badge badge-vision" id="visionModeBadge" style="display:none;">👁️ Vision Active</span>
+                </div>
+                <div class="preview-container">
+                    <div class="preview-placeholder" id="previewPlaceholder">
+                        <span>Waiting for live screenshot telemetry stream...</span>
+                    </div>
+                    <img id="livePreviewImg" class="preview-img" style="display: none;" alt="Live Browser View">
+                </div>
+                <div class="preview-meta">
+                    <span id="previewPageUrl">URL: N/A</span>
+                </div>
+            </section>
+
+            <!-- Right Column: Live Step Telemetry Log Feed -->
+            <section class="panel feed-panel">
+                <div class="panel-header">
+                    <h2>⚡ Step History & Reasoning Feed</h2>
+                    <button id="clearLogsBtn" class="btn btn-secondary btn-sm">Clear Logs</button>
+                </div>
+                <div class="log-feed" id="logFeed">
+                    <div class="empty-feed-msg">No step telemetry events recorded yet.</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

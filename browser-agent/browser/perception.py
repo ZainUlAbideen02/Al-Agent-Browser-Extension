@@ -25,9 +25,6 @@ EXTRACTION_JS = r"""
         return (
             rect.width > 0 &&
             rect.height > 0 &&
-            rect.top >= -500 && rect.left >= -500 &&
-            rect.top <= (window.innerHeight + 500) &&
-            rect.left <= (window.innerWidth + 500) &&
             style.visibility !== 'hidden' &&
             style.display !== 'none' &&
             style.opacity !== '0'
@@ -36,76 +33,100 @@ EXTRACTION_JS = r"""
 
     function buildSelector(el) {
         if (el.id) {
-            return `#${CSS.escape(el.id)}`;
-        }
-        if (el.getAttribute('name')) {
-            return `${el.tagName.toLowerCase()}[name="${el.getAttribute('name')}"]`;
-        }
-        if (el.getAttribute('aria-label')) {
-            return `${el.tagName.toLowerCase()}[aria-label="${el.getAttribute('aria-label')}"]`;
-        }
-        if (el.getAttribute('placeholder')) {
-            return `${el.tagName.toLowerCase()}[placeholder="${el.getAttribute('placeholder')}"]`;
-        }
-        if (el.getAttribute('role')) {
-            const role = el.getAttribute('role');
-            const text = (el.innerText || el.textContent || '').trim().slice(0, 20);
-            if (text) {
-                return `[role="${role}"]:has-text("${text.replace(/"/g, '\\"')}")`;
-            }
-            return `[role="${role}"]`;
-        }
-        
-        const text = (el.innerText || el.textContent || el.value || '').trim();
-        if (text && text.length > 0 && text.length <= 40) {
-            const cleanText = text.replace(/[\n\r]+/g, ' ').replace(/"/g, '\\"');
-            return `${el.tagName.toLowerCase()}:has-text("${cleanText}")`;
+            const escapedId = CSS.escape ? CSS.escape(el.id) : el.id;
+            return `#${escapedId}`;
         }
 
-        let path = el.tagName.toLowerCase();
-        if (el.className && typeof el.className === 'string') {
-            const classes = el.className.trim().split(/\s+/).filter(c => c && !c.includes(':')).slice(0, 2);
-            if (classes.length > 0) {
-                path += '.' + classes.map(c => CSS.escape(c)).join('.');
+        const tag = el.tagName.toLowerCase();
+        
+        // Use text locators if available for links and buttons
+        const text = (el.innerText || el.textContent || '').trim();
+        if (text && text.length <= 40 && (tag === 'a' || tag === 'button')) {
+            const cleanText = text.replace(/"/g, '\\"').replace(/\n/g, ' ');
+            return `${tag}:has-text("${cleanText}")`;
+        }
+
+        if (el.name) {
+            return `${tag}[name="${el.name}"]`;
+        }
+        if (el.placeholder) {
+            return `${tag}[placeholder="${el.placeholder}"]`;
+        }
+        if (el.getAttribute('role')) {
+            return `${tag}[role="${el.getAttribute('role')}"]`;
+        }
+
+        // Fallback: nth-of-type relative to parent
+        const parent = el.parentElement;
+        if (parent) {
+            const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+            if (siblings.length > 1) {
+                const index = siblings.indexOf(el) + 1;
+                return `${tag}:nth-of-type(${index})`;
             }
         }
-        return path;
+
+        return tag;
     }
 
     for (const el of elements) {
         if (!isVisible(el)) continue;
 
         const tag = el.tagName.toLowerCase();
-        const text = (el.innerText || el.textContent || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+        const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50);
         const selector = buildSelector(el);
+        
+        if (seenSelectors.has(selector)) continue;
+        seenSelectors.add(selector);
 
-        let optionsList = [];
-        if (tag === 'select' && el.options) {
-            optionsList = Array.from(el.options).map(o => ({
-                value: o.value || '',
-                text: (o.text || '').trim()
-            })).filter(o => o.text.length > 0);
+        let options = [];
+        if (tag === 'select') {
+            options = Array.from(el.options).map(opt => ({
+                value: opt.value,
+                text: (opt.text || opt.innerText || '').trim()
+            }));
         }
 
-        if (!seenSelectors.has(selector)) {
-            seenSelectors.add(selector);
-            results.push({
-                tag: tag,
-                text: text,
-                type: el.getAttribute('type') || '',
-                placeholder: el.getAttribute('placeholder') || '',
-                aria_label: el.getAttribute('aria-label') || '',
-                selector: selector,
-                options: optionsList
-            });
-        }
+        results.push({
+            tag: tag,
+            text: text,
+            selector: selector,
+            type: el.type || null,
+            placeholder: el.placeholder || null,
+            options: options
+        });
 
-        if (results.length >= 30) break;
+        if (results.length >= 30) break; // Limit to 30 elements for token efficiency
     }
 
     return results;
 }
 """
+
+class DOMPerception:
+    """Class wrapper around perception DOM extraction script."""
+
+    def extract_state(self, page, screenshot_path: str) -> Dict[str, Any]:
+        """Extract simplified DOM state and save screenshot."""
+        url = page.url
+        title = page.title()
+        try:
+            page.screenshot(path=screenshot_path, full_page=False)
+        except Exception as se:
+            logger.warning(f"Screenshot capture failed: {se}")
+
+        try:
+            elements: List[Dict[str, Any]] = page.evaluate(EXTRACTION_JS)
+        except Exception as e:
+            logger.warning(f"DOM extraction script failed: {e}. Falling back to empty element list.")
+            elements = []
+
+        return {
+            "url": url,
+            "title": title,
+            "elements": elements,
+            "screenshot_path": screenshot_path
+        }
 
 def get_page_state(
     controller: BrowserController,
@@ -116,26 +137,6 @@ def get_page_state(
     Extract simplified DOM (interactive elements + select options), page metadata, and capture a step screenshot.
     """
     os.makedirs(log_dir, exist_ok=True)
-
     page = controller.page
-    url = page.url
-    title = page.title()
-
-    screenshot_filename = f"step_{step_num}.png"
-    screenshot_path = os.path.join(log_dir, screenshot_filename)
-    controller.screenshot(screenshot_path)
-
-    try:
-        elements: List[Dict[str, Any]] = page.evaluate(EXTRACTION_JS)
-    except Exception as e:
-        logger.warning(f"DOM extraction script failed: {e}. Falling back to empty element list.")
-        elements = []
-
-    logger.info(f"Page State [Step {step_num}]: Title='{title}' | Elements Found={len(elements)}")
-
-    return {
-        "url": url,
-        "title": title,
-        "elements": elements,
-        "screenshot_path": screenshot_path
-    }
+    screenshot_path = os.path.join(log_dir, f"step_{step_num}.png")
+    return DOMPerception().extract_state(page, screenshot_path)
