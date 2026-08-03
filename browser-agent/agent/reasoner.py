@@ -5,34 +5,70 @@ from agent.base_agent import BaseAgent
 
 logger = logging.getLogger("browser_agent.agent.reasoner")
 
+class VisualActionDecision(BaseModel):
+    """Pydantic schema for Pure Visual Computer-Use Agent action decision."""
+    thought: str = Field(
+        ...,
+        description="Detailed visual analysis of the screenshot, identifying buttons, input fields, dropdowns, or canvas elements."
+    )
+    action: Literal["click", "type", "key", "scroll", "drag_and_drop", "wait", "done"] = Field(
+        ...,
+        description="The physical action to execute on the browser."
+    )
+    x: Optional[int] = Field(None, description="Exact center X pixel coordinate of the target element.")
+    y: Optional[int] = Field(None, description="Exact center Y pixel coordinate of the target element.")
+    text: Optional[str] = Field(None, description="Text string to type, or key name to press (e.g., 'Enter', 'Tab').")
+    direction: Optional[Literal["up", "down", "left", "right"]] = Field(None, description="Scroll direction.")
+    start_x: Optional[int] = Field(None, description="Drag start X coordinate.")
+    start_y: Optional[int] = Field(None, description="Drag start Y coordinate.")
+    end_x: Optional[int] = Field(None, description="Drag end X coordinate.")
+    end_y: Optional[int] = Field(None, description="Drag end Y coordinate.")
+
 class ActionDecision(BaseModel):
-    """Pydantic schema for structured action decision output from LLM."""
+    """Legacy schema supporting DOM perception and fallback calls."""
     action: Literal["click", "click_coordinate", "type", "select", "scroll", "wait", "done"] = Field(
-        description="The action type to perform. Must be one of: click, click_coordinate, type, select, scroll, wait, done."
+        description="The action type to perform."
     )
-    selector: Optional[str] = Field(
-        default=None,
-        description="Playwright selector or CSS locator for the target interactive element."
-    )
-    x: Optional[int] = Field(
-        default=None,
-        description="Optional X pixel coordinate for visual click on canvas or non-DOM element."
-    )
-    y: Optional[int] = Field(
-        default=None,
-        description="Optional Y pixel coordinate for visual click on canvas or non-DOM element."
-    )
-    text: Optional[str] = Field(
-        default=None,
-        description="Text content to type into input field (required if action is 'type')."
-    )
-    value: Optional[str] = Field(
-        default=None,
-        description="Option text label or value string to select from native <select> dropdown (required if action is 'select')."
-    )
-    reasoning: str = Field(
-        description="Step-by-step reasoning explaining why this action was chosen."
-    )
+    selector: Optional[str] = Field(default=None)
+    x: Optional[int] = Field(default=None)
+    y: Optional[int] = Field(default=None)
+    text: Optional[str] = Field(default=None)
+    value: Optional[str] = Field(default=None)
+    reasoning: str = Field(description="Reasoning explaining why this action was chosen.")
+
+SYSTEM_PROMPT_VISUAL = """You are an expert AI Visual Computer-Use Agent.
+You control a web browser purely by observing high-resolution page screenshots and issuing physical mouse and keyboard actions.
+
+Active Browser Viewport: {viewport_width} x {viewport_height} pixels.
+
+Coordinate Rules:
+- All (x, y) coordinates must be integers within [0, {max_x}] for X and [0, {max_y}] for Y.
+- Coordinates represent exact pixel center locations on the provided screenshot image.
+
+Available Physical Actions:
+1. "click": Click at center pixel coordinates (specify integer 'x' and 'y').
+2. "type": Type text string (specify 'x' and 'y' to focus input box, and 'text' string to enter).
+3. "key": Press a single keyboard key like 'Enter', 'Tab', 'Backspace', or 'Escape' (specify key name in 'text').
+4. "scroll": Scroll page (specify 'direction': "up", "down", "left", "right").
+5. "drag_and_drop": Click and drag from ('start_x', 'start_y') to ('end_x', 'end_y').
+6. "wait": Pause 2 seconds for page or results to load.
+7. "done": Declare that the objective is fully completed.
+
+Output strictly valid JSON matching this schema:
+{{
+  "thought": "<detailed visual analysis of the screenshot identifying target buttons, inputs, text>",
+  "action": "click" | "type" | "key" | "scroll" | "drag_and_drop" | "wait" | "done",
+  "x": 640 or null,
+  "y": 400 or null,
+  "text": "search query" or null,
+  "direction": "down" or null,
+  "start_x": null,
+  "start_y": null,
+  "end_x": null,
+  "end_y": null
+}}
+Do NOT output any markdown formatting or extra text outside the JSON object.
+"""
 
 SYSTEM_PROMPT_DOM = """You are an AI web automation agent. Your goal is to complete a user task on a web page by taking one step at a time.
 
@@ -49,21 +85,71 @@ Rules:
 - For native HTML <select> dropdown elements, ALWAYS use the "select" action with the target option label/value in 'value'. Do NOT try to click options inside a select dropdown.
 - Use the exact 'selector' provided for the target element.
 - If the goal is satisfied, choose "done".
-- Output strictly valid JSON matching this schema:
-{
-  "action": "click" | "click_coordinate" | "type" | "select" | "scroll" | "wait" | "done",
-  "selector": "<exact locator string or null>",
-  "x": null,
-  "y": null,
-  "text": "<text to enter if action is type else null>",
-  "value": "<option value/label to choose if action is select else null>",
-  "reasoning": "<short sentence explaining why>"
-}
-- Do NOT wrap in markdown text outside the JSON block.
+- Output strictly valid JSON.
 """
 
 class ReasonerAgent(BaseAgent):
-    """LLM Reasoner agent deciding next action using DOM perception or Vision Fallback."""
+    """LLM Reasoner agent supporting Pure Visual Computer-Use and Hybrid DOM reasoning."""
+
+    def decide_visual_action(
+        self,
+        goal: str,
+        visual_state: Dict[str, Any],
+        history_summary: str
+    ) -> Dict[str, Any]:
+        """
+        Pure Visual Computer-Use Agent reasoning: Analyzes page screenshot and viewport metadata to decide visual action.
+        """
+        vw = visual_state.get("viewport_width", 1280)
+        vh = visual_state.get("viewport_height", 800)
+        max_x = vw - 1
+        max_y = vh - 1
+        screenshot_path = visual_state.get("screenshot_path")
+
+        system_prompt = SYSTEM_PROMPT_VISUAL.format(
+            viewport_width=vw,
+            viewport_height=vh,
+            max_x=max_x,
+            max_y=max_y
+        )
+
+        user_message = f"""Current Task Goal: "{goal}"
+
+Current Page URL: {visual_state.get('current_url', 'N/A')}
+Current Page Title: {visual_state.get('page_title', 'N/A')}
+Viewport Dimensions: {vw}x{vh} pixels
+
+Action History (Recent steps):
+{history_summary}
+
+Analyze the attached screenshot carefully. Determine the exact next visual action to execute.
+Output strictly valid JSON.
+"""
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                raw_decision = self.call_llm(
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    expect_json=True,
+                    image_path=screenshot_path
+                )
+                decision_obj = VisualActionDecision(**raw_decision)
+                result = decision_obj.model_dump()
+                # Map reasoning for legacy compatibility
+                result["reasoning"] = result.get("thought", "")
+                logger.info(f"Visual Decision: Action={result['action']} | Coords=({result.get('x')}, {result.get('y')}) | Thought: {result['thought'][:60]}...")
+                return result
+            except ValidationError as ve:
+                logger.warning(f"Pydantic Visual validation failed (attempt {attempt + 1}): {ve}")
+                if attempt == max_retries:
+                    raise RuntimeError(f"Visual action decision failed validation: {ve}") from ve
+                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please fix JSON schema output.]"
+            except Exception as e:
+                logger.error(f"Error deciding visual action: {e}")
+                raise
+
+        raise RuntimeError("Failed to generate valid visual action decision.")
 
     def _format_elements(self, elements: List[Dict[str, Any]]) -> str:
         formatted = []
@@ -95,9 +181,7 @@ class ReasonerAgent(BaseAgent):
         page_state: Dict[str, Any],
         history_summary: str
     ) -> Dict[str, Any]:
-        """
-        Evaluate current state using DOM data and return validated action decision.
-        """
+        """Evaluate current state using DOM data and return validated action decision."""
         elements: List[Dict[str, Any]] = page_state.get("elements", [])
         elements_str = self._format_elements(elements)
 
@@ -112,8 +196,7 @@ Interactive Elements on Page (~{len(elements)} items):
 Action History (Recent steps):
 {history_summary}
 
-Analyze the current page state, goal, and past actions. What is the single next best action to take?
-Respond strictly in JSON format.
+Analyze the current page state, goal, and past actions. Respond strictly in JSON format.
 """
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -143,69 +226,15 @@ Respond strictly in JSON format.
         history_summary: str,
         failure_reason: str
     ) -> Dict[str, Any]:
-        """
-        Multimodal Vision Fallback: Prompt Gemini/Groq vision model with page screenshot when DOM selector fails.
-        """
+        """Multimodal Vision Fallback: Prompt vision model with page screenshot when DOM selector fails."""
         screenshot_path = page_state.get("screenshot_path")
         logger.info(f"Triggering Vision Fallback using screenshot: {screenshot_path}")
 
-        elements: List[Dict[str, Any]] = page_state.get("elements", [])
-        elements_str = self._format_elements(elements)
-
-        system_prompt = f"""You are an AI web automation vision expert.
-A previous DOM-based interaction failed on this webpage. You are provided with the current webpage screenshot image to visually analyze the layout.
-
-Task Goal: "{goal}"
-Action Failure Reason: "{failure_reason}"
-
-Your Objective:
-Examine the visual screenshot of the page carefully.
-1. Identify the target element visually (e.g., look for buttons, canvas elements, links, or text).
-2. If the target element has a clear CSS selector in DOM (e.g. '#canvasB'), specify "action": "click" and "selector": "#canvasB".
-3. If the element is drawn inside a canvas or lacks a valid DOM selector, output "action": "click_coordinate" with integer pixel coordinates 'x' and 'y' (e.g. x: 160, y: 55).
-4. Output strictly valid JSON matching this schema:
-{{
-  "action": "click" or "click_coordinate",
-  "selector": "#canvasB" or null,
-  "x": 160 or null,
-  "y": 55 or null,
-  "text": null,
-  "value": null,
-  "reasoning": "<short explanation based on visual analysis of the screenshot>"
-}}
-Do NOT output extra text outside the JSON object.
-"""
-        user_message = f"""Page URL: {page_state.get('url', 'N/A')}
-Page Title: {page_state.get('title', 'N/A')}
-
-DOM Elements Context:
-{elements_str}
-
-Recent Action History:
-{history_summary}
-
-Please analyze the attached screenshot image and recommend the corrected action decision JSON.
-"""
-        max_retries = 2
-        for attempt in range(max_retries + 1):
-            try:
-                raw_decision = self.call_llm(
-                    system_prompt=system_prompt,
-                    user_message=user_message,
-                    expect_json=True,
-                    image_path=screenshot_path
-                )
-                decision_obj = ActionDecision(**raw_decision)
-                result = decision_obj.model_dump()
-                logger.info(f"Vision Fallback Decision: {result.get('action')} | Selector: {result.get('selector')} | X: {result.get('x')} | Y: {result.get('y')}")
-                return result
-            except ValidationError as ve:
-                logger.warning(f"Vision decision validation error (attempt {attempt + 1}): {ve}")
-                if attempt == max_retries:
-                    raise RuntimeError(f"Vision decision validation failed: {ve}") from ve
-                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please output valid JSON matching fields: action, selector, x, y, text, value, reasoning.]"
-            except Exception as e:
-                logger.error(f"Vision Fallback failed: {e}")
-                raise
-
-        raise RuntimeError("Failed to generate valid Vision decision.")
+        visual_state = {
+            "viewport_width": 1280,
+            "viewport_height": 800,
+            "current_url": page_state.get("url", ""),
+            "page_title": page_state.get("title", ""),
+            "screenshot_path": screenshot_path
+        }
+        return self.decide_visual_action(goal=goal, visual_state=visual_state, history_summary=history_summary)
