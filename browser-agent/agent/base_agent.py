@@ -1,27 +1,27 @@
+import os
 import json
+import base64
 import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Union, Optional
-from PIL import Image
-import google.generativeai as genai
-from config.settings import GEMINI_API_KEY, DEFAULT_MODEL, validate_config
+from groq import Groq
+from config.settings import GROQ_API_KEY, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MODEL, check_api_key
 
 logger = logging.getLogger("browser_agent.agent.base")
 
 class BaseAgent:
-    """Base LLM wrapper managing Google Gemini calls with vision support and JSON retry logic."""
+    """Base LLM wrapper managing Groq API calls with vision support and JSON retry logic."""
 
-    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
-        self.api_key = api_key or GEMINI_API_KEY
-        self.model_name = model_name or DEFAULT_MODEL
+    def __init__(self, api_key: Optional[str] = None, text_model: Optional[str] = None, vision_model: Optional[str] = None):
+        self.api_key = api_key or GROQ_API_KEY
+        if not self.api_key or self.api_key == "your_key_here":
+            self.api_key = check_api_key()
 
-        if not self.api_key:
-            validate_config()
-        else:
-            genai.configure(api_key=self.api_key)
-
-        self._model = genai.GenerativeModel(self.model_name)
+        self.text_model = text_model or DEFAULT_TEXT_MODEL
+        self.vision_model = vision_model or DEFAULT_VISION_MODEL
+        
+        self.client = Groq(api_key=self.api_key)
 
     def _clean_json_text(self, text: str) -> str:
         """Extract raw JSON text, removing markdown code blocks if present."""
@@ -40,50 +40,67 @@ class BaseAgent:
         image_path: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Call Gemini LLM with prompt, optional vision screenshot, and JSON parsing retry logic.
-
-        Args:
-            system_prompt: System context instructions for the model.
-            user_message: Specific request / user prompt context.
-            expect_json: Whether output is expected to be a valid JSON dict.
-            max_retries: Maximum number of retries if JSON parsing fails.
-            image_path: Optional path to PNG screenshot image for vision model analysis.
-
-        Returns:
-            Parsed JSON dict if expect_json=True, else response text string.
+        Call Groq API with system/user prompt, optional base64 image payload, and JSON retry logic.
         """
-        combined_text = f"{system_prompt}\n\nUser Request:\n{user_message}"
-        last_error = None
+        is_vision = False
+        encoded_image = None
 
-        image_obj = None
         if image_path and Path(image_path).exists():
             try:
-                image_obj = Image.open(image_path)
-                logger.info(f"Loaded vision image from {image_path}")
+                with open(image_path, "rb") as img_file:
+                    encoded_image = base64.b64encode(img_file.read()).decode("utf-8")
+                is_vision = True
+                logger.info(f"Encoded vision screenshot from {image_path} to base64.")
             except Exception as ie:
-                logger.warning(f"Could not load image file {image_path}: {ie}")
+                logger.warning(f"Could not read image file {image_path}: {ie}")
+
+        model_name = self.vision_model if is_vision else self.text_model
+        last_error = None
 
         for attempt in range(1 + max_retries):
             try:
-                current_text = combined_text
+                current_user_msg = user_message
                 if attempt > 0 and expect_json:
-                    current_text += (
+                    current_user_msg += (
                         f"\n\n[ATTENTION: Previous response failed to parse as valid JSON. "
-                        f"Error: {last_error}. Please output ONLY raw valid JSON, no markdown extra text.]"
+                        f"Error: {last_error}. Please output ONLY raw valid JSON matching the schema.]"
                     )
 
-                logger.debug(f"Calling Gemini LLM (Vision={image_obj is not None}, attempt {attempt + 1}/{1 + max_retries})...")
-                
-                content_payload = [current_text]
-                if image_obj:
-                    content_payload.append(image_obj)
+                messages = [{"role": "system", "content": system_prompt}]
 
-                response = self._model.generate_content(content_payload)
-                
-                if not response.text:
-                    raise ValueError("Received empty response from Gemini API.")
+                if is_vision and encoded_image:
+                    messages.append({
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": current_user_msg},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{encoded_image}"
+                                }
+                            }
+                        ]
+                    })
+                else:
+                    messages.append({"role": "user", "content": current_user_msg})
 
-                response_text = response.text.strip()
+                logger.debug(f"Calling Groq API (Model={model_name}, Vision={is_vision}, Attempt {attempt + 1}/{1 + max_retries})...")
+
+                kwargs = {
+                    "model": model_name,
+                    "messages": messages,
+                    "temperature": 0.1,
+                }
+                # Groq strictly enforces json_object for text models, but can fail 400 on vision models if format payload is rigid
+                if expect_json and not is_vision:
+                    kwargs["response_format"] = {"type": "json_object"}
+
+                response = self.client.chat.completions.create(**kwargs)
+
+                if not response.choices or not response.choices[0].message.content:
+                    raise ValueError("Received empty response from Groq API.")
+
+                response_text = response.choices[0].message.content.strip()
 
                 if not expect_json:
                     return response_text
@@ -98,10 +115,10 @@ class BaseAgent:
 
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"LLM call attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Groq API call attempt {attempt + 1} failed: {e}")
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"Failed to obtain valid response from LLM after {max_retries + 1} attempts. Last error: {last_error}"
+                        f"Failed to obtain valid response from Groq API after {max_retries + 1} attempts. Last error: {last_error}"
                     ) from e
 
-        raise RuntimeError("LLM call failed unexpectedly.")
+        raise RuntimeError("Groq API call failed unexpectedly.")

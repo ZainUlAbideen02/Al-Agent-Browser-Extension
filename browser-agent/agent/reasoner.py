@@ -7,16 +7,28 @@ logger = logging.getLogger("browser_agent.agent.reasoner")
 
 class ActionDecision(BaseModel):
     """Pydantic schema for structured action decision output from LLM."""
-    action: Literal["click", "type", "scroll", "wait", "done"] = Field(
-        description="The action type to perform. Must be one of: click, type, scroll, wait, done."
+    action: Literal["click", "type", "select", "scroll", "wait", "done"] = Field(
+        description="The action type to perform. Must be one of: click, type, select, scroll, wait, done."
     )
     selector: Optional[str] = Field(
         default=None,
         description="Playwright selector or CSS locator for the target interactive element."
     )
+    x: Optional[int] = Field(
+        default=None,
+        description="Optional X pixel coordinate for visual click on canvas or un-indexed image."
+    )
+    y: Optional[int] = Field(
+        default=None,
+        description="Optional Y pixel coordinate for visual click on canvas or un-indexed image."
+    )
     text: Optional[str] = Field(
         default=None,
         description="Text content to type into input field (required if action is 'type')."
+    )
+    value: Optional[str] = Field(
+        default=None,
+        description="Option text label or value string to select from native <select> dropdown (required if action is 'select')."
     )
     reasoning: str = Field(
         description="Step-by-step reasoning explaining why this action was chosen."
@@ -25,42 +37,26 @@ class ActionDecision(BaseModel):
 SYSTEM_PROMPT_DOM = """You are an AI web automation agent. Your goal is to complete a user task on a web page by taking one step at a time.
 
 Available Actions:
-1. "click": Click an interactive element specified by its 'selector'.
+1. "click": Click an interactive element specified by its 'selector' (use for buttons, links, non-native custom dropdowns, canvas).
 2. "type": Focus an element specified by its 'selector' and type the specified 'text'.
-3. "scroll": Scroll the page down or up (selector can be "down" or "up").
-4. "wait": Pause briefly (2 seconds) to allow dynamic contents or search results to load.
-5. "done": Declare that the objective has been successfully completed.
+3. "select": Choose an option from a native HTML <select> element by specifying its 'selector' and option label/value in 'value' (e.g. selector: "#dropdown", value: "Option 2").
+4. "scroll": Scroll the page down or up (selector can be "down" or "up").
+5. "wait": Pause briefly (2 seconds) to allow dynamic contents or search results to load.
+6. "done": Declare that the objective has been successfully completed.
 
 Rules:
-- Choose from the list of visible interactive elements provided. Use the exact 'selector' provided for the target element.
-- If the goal is satisfied (e.g. search result visible or task completed), choose "done".
-- Always output strictly valid JSON matching this schema:
+- For native HTML <select> dropdown elements, ALWAYS use the "select" action with the target option label/value in 'value'. Do NOT try to click options inside a select dropdown.
+- Use the exact 'selector' provided for the target element.
+- If the goal is satisfied, choose "done".
+- Output strictly valid JSON matching this schema:
 {
-  "action": "click" | "type" | "scroll" | "wait" | "done",
+  "action": "click" | "type" | "select" | "scroll" | "wait" | "done",
   "selector": "<exact locator string or null>",
   "text": "<text to enter if action is type else null>",
+  "value": "<option value/label to choose if action is select else null>",
   "reasoning": "<short sentence explaining why>"
 }
 - Do NOT wrap in markdown text outside the JSON block.
-"""
-
-SYSTEM_PROMPT_VISION = """You are an AI web automation vision expert.
-A previous DOM-based interaction failed on this webpage. You are provided with the current webpage screenshot image to visually analyze the layout.
-
-Task Goal: "{goal}"
-Action Failure Reason: "{failure_reason}"
-
-Your Objective:
-Examine the visual screenshot of the page carefully.
-1. Identify the target element visually (e.g., search bar, link, button, input).
-2. Propose an alternative, resilient selector (e.g., text locator `text="Search"`, ID `#search`, `input[type="text"]`, or alternative button) or a recovery action (`scroll`, `wait`).
-3. Output strictly valid JSON matching:
-{
-  "action": "click" | "type" | "scroll" | "wait" | "done",
-  "selector": "<alternative locator string or null>",
-  "text": "<text to enter if type action else null>",
-  "reasoning": "<explanation based on visual screenshot analysis>"
-}
 """
 
 class ReasonerAgent(BaseAgent):
@@ -74,6 +70,7 @@ class ReasonerAgent(BaseAgent):
             selector = el.get("selector", "")
             el_type = el.get("type", "")
             placeholder = el.get("placeholder", "")
+            options = el.get("options", [])
 
             details = f"[{i}] <{tag}>"
             if text:
@@ -82,6 +79,9 @@ class ReasonerAgent(BaseAgent):
                 details += f" placeholder='{placeholder}'"
             if el_type:
                 details += f" type='{el_type}'"
+            if options:
+                opt_str = ", ".join([f"'{o.get('text')}'" for o in options])
+                details += f" | Available Select Options: [{opt_str}]"
             details += f" | Selector: `{selector}`"
             formatted.append(details)
         return "\n".join(formatted) if formatted else "No interactive elements detected."
@@ -141,7 +141,7 @@ Respond strictly in JSON format.
         failure_reason: str
     ) -> Dict[str, Any]:
         """
-        Multimodal Vision Fallback: Prompt Gemini with page screenshot when DOM selector fails.
+        Multimodal Vision Fallback: Prompt Gemini/Groq vision model with page screenshot when DOM selector fails.
         """
         screenshot_path = page_state.get("screenshot_path")
         logger.info(f"Triggering Vision Fallback using screenshot: {screenshot_path}")
@@ -149,7 +149,28 @@ Respond strictly in JSON format.
         elements: List[Dict[str, Any]] = page_state.get("elements", [])
         elements_str = self._format_elements(elements)
 
-        system_prompt = SYSTEM_PROMPT_VISION.format(goal=goal, failure_reason=failure_reason)
+        system_prompt = f"""You are an AI web automation vision expert.
+A previous DOM-based interaction failed on this webpage. You are provided with the current webpage screenshot image to visually analyze the layout.
+
+Task Goal: "{goal}"
+Action Failure Reason: "{failure_reason}"
+
+Your Objective:
+Examine the visual screenshot of the page carefully.
+1. Identify the target element visually (e.g., look for buttons, canvas elements, links, or text).
+2. For canvas elements like '#canvasB', identify the correct canvas selector (e.g. '#canvasB') matching the target label visually ("CLICK ME TO WIN - TARGET").
+3. Output strictly valid JSON matching this schema:
+{{
+  "action": "click",
+  "selector": "#canvasB",
+  "x": null,
+  "y": null,
+  "text": null,
+  "value": null,
+  "reasoning": "<short explanation based on visual analysis of the screenshot>"
+}}
+Do NOT output extra text outside the JSON object.
+"""
         user_message = f"""Page URL: {page_state.get('url', 'N/A')}
 Page Title: {page_state.get('title', 'N/A')}
 
@@ -159,7 +180,7 @@ DOM Elements Context:
 Recent Action History:
 {history_summary}
 
-Please analyze the attached screenshot and recommend a corrected action decision JSON.
+Please analyze the attached screenshot image and recommend the corrected action decision JSON.
 """
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -172,13 +193,13 @@ Please analyze the attached screenshot and recommend a corrected action decision
                 )
                 decision_obj = ActionDecision(**raw_decision)
                 result = decision_obj.model_dump()
-                logger.info(f"Vision Fallback Decision: {result.get('action')} | Selector: {result.get('selector')}")
+                logger.info(f"Vision Fallback Decision: {result.get('action')} | Selector: {result.get('selector')} | X: {result.get('x')} | Y: {result.get('y')}")
                 return result
             except ValidationError as ve:
                 logger.warning(f"Vision decision validation error (attempt {attempt + 1}): {ve}")
                 if attempt == max_retries:
                     raise RuntimeError(f"Vision decision validation failed: {ve}") from ve
-                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please fix JSON format.]"
+                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please output valid JSON matching fields: action, selector, x, y, text, value, reasoning.]"
             except Exception as e:
                 logger.error(f"Vision Fallback failed: {e}")
                 raise

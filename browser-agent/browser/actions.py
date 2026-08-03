@@ -11,35 +11,41 @@ def execute_action(
     action_dict: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Executes action dictionary safely with structured error outputs and stale element recovery.
-
-    Args:
-        controller: Active BrowserController instance.
-        action_dict: Action specification from LLM (action, selector, text, reasoning).
-
-    Returns:
-        Dict containing success (bool), error_type (str), message (str), and stale_element (bool).
+    Executes action dictionary safely with structured error outputs, coordinate clicks, and stale element recovery.
     """
     action_type = action_dict.get("action")
     selector = action_dict.get("selector")
     text = action_dict.get("text")
+    value = action_dict.get("value")
+    x = action_dict.get("x")
+    y = action_dict.get("y")
     reasoning = action_dict.get("reasoning", "")
 
-    logger.info(f"Executing Action: '{action_type}' | Selector: '{selector}' | Text: '{text}'")
+    logger.info(f"Executing Action: '{action_type}' | Selector: '{selector}' | Coords: ({x}, {y}) | Text: '{text}' | Value: '{value}'")
 
     try:
         if action_type == "click":
+            # If explicit (x, y) coordinates are provided by Vision model
+            if x is not None and y is not None:
+                controller.click_coordinate(int(x), int(y))
+                time.sleep(1)
+                return {
+                    "success": True,
+                    "error_type": None,
+                    "message": f"Successfully clicked pixel coordinates ({x}, {y}).",
+                    "stale_element": False
+                }
+
             if not selector:
                 return {
                     "success": False,
                     "error_type": "missing_selector",
-                    "message": "Click action requires a valid 'selector'.",
+                    "message": "Click action requires a valid 'selector' or (x, y) coordinates.",
                     "stale_element": False
                 }
             try:
                 controller.click(selector)
             except PlaywrightTimeoutError:
-                # Stale-element / re-fetch attempt: wait 1 second and retry click once
                 logger.warning(f"Click selector '{selector}' timed out. Re-attempting locator check...")
                 time.sleep(1)
                 controller.click(selector, timeout=5000)
@@ -74,6 +80,30 @@ def execute_action(
                 "success": True,
                 "error_type": None,
                 "message": f"Successfully typed '{text}' into '{selector}'.",
+                "stale_element": False
+            }
+
+        elif action_type == "select":
+            if not selector:
+                return {
+                    "success": False,
+                    "error_type": "missing_selector",
+                    "message": "Select action requires a valid 'selector'.",
+                    "stale_element": False
+                }
+            target_value = value or text or ""
+            try:
+                controller.select_option(selector, target_value)
+            except PlaywrightTimeoutError:
+                logger.warning(f"Select option '{target_value}' in '{selector}' timed out. Retrying...")
+                time.sleep(1)
+                controller.select_option(selector, target_value, timeout=5000)
+
+            time.sleep(1)
+            return {
+                "success": True,
+                "error_type": None,
+                "message": f"Successfully selected option '{target_value}' in '{selector}'.",
                 "stale_element": False
             }
 

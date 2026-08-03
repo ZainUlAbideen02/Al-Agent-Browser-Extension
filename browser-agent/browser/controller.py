@@ -42,7 +42,7 @@ class BrowserController:
     def goto(self, url: str, timeout: Optional[int] = None) -> None:
         """Navigate browser to specified URL with timeout guard."""
         timeout_ms = timeout or self.default_timeout_ms
-        if not url.startswith("http://") and not url.startswith("https://"):
+        if not url.startswith("http://") and not url.startswith("https://") and not url.startswith("file://"):
             url = f"https://{url}"
         logger.info(f"Navigating to {url} (timeout={timeout_ms}ms)...")
         self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -54,7 +54,6 @@ class BrowserController:
             locator.wait_for(state="visible", timeout=timeout_ms)
             return locator
         except PlaywrightTimeoutError:
-            # Try text locator fallback if selector has syntax like tag:has-text("...")
             if ":has-text(" in selector:
                 clean_text = selector.split(':has-text("')[1].rstrip('")')
                 alt_locator = self.page.get_by_text(clean_text, exact=False).first
@@ -69,6 +68,11 @@ class BrowserController:
         locator = self._resolve_locator(selector, timeout_ms)
         locator.click(timeout=timeout_ms)
 
+    def click_coordinate(self, x: int, y: int) -> None:
+        """Click at specific (x, y) page coordinates."""
+        logger.info(f"Clicking at pixel coordinates: ({x}, {y})")
+        self.page.mouse.click(x, y)
+
     def type_text(self, selector: str, text: str, timeout: Optional[int] = None) -> None:
         """Focus an element, type text, and press Enter."""
         timeout_ms = timeout or self.default_timeout_ms
@@ -77,6 +81,16 @@ class BrowserController:
         locator.click(timeout=timeout_ms // 2)
         locator.fill(text)
         self.page.keyboard.press("Enter")
+
+    def select_option(self, selector: str, value: str, timeout: Optional[int] = None) -> None:
+        """Select an option in a native <select> dropdown by label or value."""
+        timeout_ms = timeout or self.default_timeout_ms
+        logger.info(f"Selecting option '{value}' in dropdown selector: '{selector}'")
+        locator = self._resolve_locator(selector, timeout_ms)
+        try:
+            locator.select_option(label=value, timeout=timeout_ms)
+        except Exception:
+            locator.select_option(value=value, timeout=timeout_ms)
 
     def scroll(self, direction: str = "down", amount: int = 500) -> None:
         """Scroll page vertically."""

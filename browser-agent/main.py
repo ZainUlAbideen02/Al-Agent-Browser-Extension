@@ -21,6 +21,8 @@ from browser.actions import execute_action
 from agent.reasoner import ReasonerAgent
 from agent.memory import StepMemory
 
+logger = logging.getLogger("browser_agent.main")
+
 def setup_logging():
     """Configure system logging."""
     logging.basicConfig(
@@ -58,23 +60,36 @@ def parse_args():
         default=False,
         help="Run browser in headless mode (default: False / headed mode)."
     )
+    parser.add_argument(
+        "--no-vision",
+        action="store_true",
+        default=False,
+        help="Disable Vision Fallback (Pure DOM ablation mode)."
+    )
     return parser.parse_args()
 
-def run_agent(goal: str, url: str, max_steps: int = 15, headless: bool = False) -> dict:
+def run_agent(
+    goal: str,
+    url: str,
+    max_steps: int = 15,
+    headless: bool = False,
+    disable_vision: bool = False
+) -> dict:
     """
     Run browser agent task loop and return execution summary data.
     """
     setup_logging()
 
+    mode_str = "Pure DOM (Ablation)" if disable_vision else "Hybrid DOM + Vision Fallback"
     print("\n" + "=" * 60)
-    print("🤖 BROWSER AGENT INITIALIZED (Hybrid DOM + Vision Fallback)")
+    print(f"🤖 BROWSER AGENT INITIALIZED ({mode_str})")
     print(f"🎯 Goal: {goal}")
     print(f"🌐 Starting URL: {url}")
-    print(f"⚙️  Max Steps: {max_steps} | Headless: {headless}")
+    print(f"⚙️  Max Steps: {max_steps} | Headless: {headless} | Vision Disabled: {disable_vision}")
     print("=" * 60 + "\n")
 
     if not validate_config():
-        print("⚠️ Warning: GEMINI_API_KEY is not configured in .env or environment.\n")
+        print("⚠️ Warning: GROQ_API_KEY is not configured in .env or environment.\n")
 
     logs_dir = "logs"
     os.makedirs(logs_dir, exist_ok=True)
@@ -102,8 +117,8 @@ def run_agent(goal: str, url: str, max_steps: int = 15, headless: bool = False) 
             history_summary = memory.format_history(max_steps=5)
             used_vision = False
 
-            # 2. Reasoner (Switch to Vision Fallback if 2+ consecutive failures occurred)
-            if consecutive_failures >= 2:
+            # 2. Reasoner (Switch to Vision Fallback if 2+ consecutive failures occurred AND vision is enabled)
+            if consecutive_failures >= 2 and not disable_vision:
                 print("👁️ Vision Fallback Triggered (2 consecutive action failures on selector). Analyzing screenshot...")
                 used_vision = True
                 failure_msg = f"Action execution failed {consecutive_failures} times in a row."
@@ -118,6 +133,8 @@ def run_agent(goal: str, url: str, max_steps: int = 15, headless: bool = False) 
                     print(f"⚠️ Vision Fallback call failed ({ve}). Falling back to DOM decision...")
                     action_dict = reasoner.decide_next_action(goal, page_state, history_summary)
             else:
+                if consecutive_failures >= 2 and disable_vision:
+                    print("⚠️ Vision Fallback bypassed (Pure DOM Ablation Mode enabled).")
                 print("🧠 Thinking next action via DOM perception...")
                 action_dict = reasoner.decide_next_action(goal, page_state, history_summary)
 
@@ -166,11 +183,11 @@ def run_agent(goal: str, url: str, max_steps: int = 15, headless: bool = False) 
             loop_check = memory.is_looping(repeat_threshold=3)
             if loop_check["is_looping"]:
                 print(f"\n⚠️ LOOP GUARD TRIGGERED! {loop_check['reason']}")
-                if not used_vision:
+                if not used_vision and not disable_vision:
                     print("🔄 Forcing Vision Fallback on next step to break loop...")
                     consecutive_failures = 2  # Force vision on next iteration
                 else:
-                    print("🛑 Agent remains stuck even after Vision Fallback. Terminating task cleanly with 'stuck' status.")
+                    print("🛑 Agent remains stuck even after Vision / Pure DOM. Terminating task cleanly with 'stuck' status.")
                     status_summary = f"Stuck: {loop_check['reason']}"
                     break
 
@@ -190,6 +207,7 @@ def run_agent(goal: str, url: str, max_steps: int = 15, headless: bool = False) 
     summary_data = {
         "goal": goal,
         "start_url": url,
+        "mode": "pure_dom" if disable_vision else "hybrid",
         "final_status": status_summary,
         "total_steps": stats["total_steps"],
         "pure_dom_steps": stats["pure_dom_steps"],
@@ -218,7 +236,8 @@ def main():
         goal=args.goal,
         url=args.url,
         max_steps=args.max_steps,
-        headless=args.headless
+        headless=args.headless,
+        disable_vision=args.no_vision
     )
 
 if __name__ == "__main__":

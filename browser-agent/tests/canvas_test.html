@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Canvas UI Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 40px; text-align: center; }
+        canvas { margin: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 8px; cursor: pointer; }
+        #status { margin-top: 20px; font-weight: bold; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+    <h1>Canvas UI Automation Benchmark</h1>
+    <p>Target Goal: Find and click the canvas button labeled 'CLICK ME TO WIN'.</p>
+    
+    <div>
+        <!-- First Canvas: Trap Button -->
+        <canvas id="canvasA" width="320" height="70"></canvas>
+    </div>
+    <div>
+        <!-- Second Canvas: Real Target Button -->
+        <canvas id="canvasB" width="320" height="70"></canvas>
+    </div>
+    
+    <div id="status">Status: Waiting for interaction...</div>
+
+    <script>
+        // Canvas A (Trap)
+        const canvasA = document.getElementById('canvasA');
+        const ctxA = canvasA.getContext('2d');
+        ctxA.fillStyle = '#dc3545'; // Red
+        ctxA.beginPath();
+        ctxA.roundRect(10, 10, 300, 50, 10);
+        ctxA.fill();
+        ctxA.fillStyle = '#ffffff';
+        ctxA.font = 'bold 18px Arial';
+        ctxA.textAlign = 'center';
+        ctxA.textBaseline = 'middle';
+        ctxA.fillText('DO NOT CLICK - WRONG TARGET', 160, 35);
+
+        canvasA.addEventListener('click', function() {
+            document.title = "Task Failed - Wrong Canvas Clicked";
+            document.getElementById('status').innerText = "FAILED: Clicked the wrong trap canvas!";
+            document.getElementById('status').style.color = "red";
+        });
+
+        // Canvas B (Target)
+        const canvasB = document.getElementById('canvasB');
+        const ctxB = canvasB.getContext('2d');
+        ctxB.fillStyle = '#28a745'; // Green
+        ctxB.beginPath();
+        ctxB.roundRect(10, 10, 300, 50, 10);
+        ctxB.fill();
+        ctxB.fillStyle = '#ffffff';
+        ctxB.font = 'bold 18px Arial';
+        ctxB.textAlign = 'center';
+        ctxB.textBaseline = 'middle';
+        ctxB.fillText('CLICK ME TO WIN - TARGET', 160, 35);
+
+        canvasB.addEventListener('click', function() {
+            document.title = "Canvas Task Completed Successfully";
+            document.getElementById('status').innerText = "SUCCESS: Target Canvas Clicked! Task Complete.";
+            document.getElementById('status').style.color = "green";
+        });
+    </script>
+</body>
+</html>

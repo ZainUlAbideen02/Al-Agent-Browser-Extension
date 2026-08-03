@@ -1,8 +1,8 @@
-# Browser Agent 🤖🌐
+# Browser Agent 🤖🌐 (Hybrid DOM + Vision Fallback via Groq API)
 
-An autonomous AI browser automation agent that interacts with web pages using Playwright and Google Gemini.
+An autonomous AI browser automation agent that interacts with web pages using Playwright and Groq API.
 
-The agent uses a **hybrid approach**: DOM data is used as the primary decision-making source (structured interactive elements prompt context), combined with visual screenshots saved at every step for audit logging, inspection, and debugging.
+The agent features a **hybrid architecture**: DOM perception is used as the primary decision-making source with `openai/gpt-oss-120b` for high speed and token efficiency. If element interaction or selector resolution fails twice consecutively (or when stuck), the agent automatically triggers **Vision Fallback**, sending a base64-encoded screenshot to Groq's multimodal vision model `qwen/qwen3.6-27b` to recover and recommend alternative actions.
 
 ---
 
@@ -12,82 +12,83 @@ The agent uses a **hybrid approach**: DOM data is used as the primary decision-m
 browser-agent/
 ├── agent/
 │   ├── __init__.py
-│   ├── base_agent.py       # LLM wrapper: call_llm(), JSON retry logic, Gemini SDK integration
-│   ├── reasoner.py         # ReasonerAgent: decisions given goal + page state + history (Pydantic validated)
-│   └── memory.py           # StepMemory: history tracking & loop detection (3+ repetitive actions)
+│   ├── base_agent.py       # LLM wrapper: Groq API client, dual model routing, base64 vision support
+│   ├── reasoner.py         # ReasonerAgent: DOM decision + decide_with_vision() fallback (Pydantic validated)
+│   └── memory.py           # StepMemory: history tracking, used_vision_fallback flags, progress loop guards
 ├── browser/
 │   ├── __init__.py
-│   ├── controller.py       # Playwright wrapper: navigate, click, type, scroll, screenshot
+│   ├── controller.py       # Playwright wrapper: navigation, click, type, scroll, 20s timeouts
 │   ├── perception.py       # DOM perception: extracts ~30 interactive elements + captures step screenshot
-│   └── actions.py          # Translates LLM JSON decision into Playwright execution commands
-├── logs/                   # Step screenshots (step_N.png) & final summary JSON (run_summary.json)
+│   └── actions.py          # Translates LLM JSON decision into Playwright execution with stale-element recovery
+├── logs/                   # Step screenshots (step_N.png), run_summary.json & evaluation_results.json
 ├── config/
-│   └── settings.py         # Configuration loader & GEMINI_API_KEY management
-├── main.py                 # CLI entrypoint for running tasks
-├── requirements.txt        # Python package dependencies
+│   └── settings.py         # Configuration loader & GROQ_API_KEY management
+├── evaluate.py             # Benchmark evaluation suite running 5 standardized web tasks
+├── main.py                 # CLI entrypoint for running browser tasks
+├── requirements.txt        # Python package dependencies (playwright, groq, pydantic, pillow, etc.)
 ├── .env.example            # Environment variables template
 └── README.md               # Documentation & usage instructions
 ```
 
 ---
 
-## ⚡ Installation & Setup
+## ⚡ Groq Dual-Model Architecture
 
-1. **Clone / Navigate to project directory**:
-   ```bash
-   cd browser-agent
-   ```
+- **DOM Reasoning Model**: `openai/gpt-oss-120b`
+  Used for fast, structured JSON decision-making over extracted interactive DOM elements (~30 elements).
+- **Vision Fallback Model**: `qwen/qwen3.6-27b`
+  Used when selector interaction fails twice in a row. Takes base64 PNG data URLs (`data:image/png;base64,...`) alongside step context to visually analyze page state.
 
-2. **Install Python dependencies**:
+---
+
+## 🛠️ Installation & Setup
+
+1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Install Playwright Chromium browser binary**:
+2. **Install Playwright Chromium browser**:
    ```bash
    playwright install chromium
    ```
 
-4. **Configure your Gemini API Key**:
-   Copy `.env.example` to `.env` and set your API key:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env`:
+3. **Get your Groq API Key**:
+   Create a free account and generate an API key at [Console Groq](https://console.groq.com).
+
+4. **Configure `.env`**:
+   Copy `.env.example` to `.env` and set your key:
    ```env
-   GEMINI_API_KEY=your_google_gemini_api_key
+   GROQ_API_KEY=gsk_your_groq_api_key_here
    ```
 
 ---
 
 ## 🚀 How to Run
 
-### Basic Usage (Headed Mode - Visible Browser)
-By default, the agent runs in **headed mode** so you can watch the browser in real time:
-
+### 1. Basic Agent CLI Task
 ```bash
 python main.py --goal "Search for 'laptop' on Google and report the first result" --url "https://google.com"
 ```
 
-### Options & Flags
-- `--goal`: *(Required)* High-level instruction or objective for the AI agent.
-- `--url`: *(Required)* Initial target web URL to load.
-- `--max-steps`: *(Optional)* Maximum number of step iterations before stopping (default: `15`).
-- `--headless`: *(Optional)* Run browser in background headless mode (no visible GUI window).
+#### CLI Flags:
+- `--goal`: *(Required)* Task objective description.
+- `--url`: *(Required)* Initial URL.
+- `--max-steps`: *(Optional)* Maximum step count (default: `15`).
+- `--headless`: *(Optional)* Run browser in background headless mode.
 
-#### Example running in headless mode:
+### 2. Running the Evaluation Benchmark Suite
+To execute all 5 benchmark tasks and generate `logs/evaluation_results.json`:
+
 ```bash
-python main.py --goal "Look up news on Wikipedia" --url "https://wikipedia.org" --max-steps 10 --headless
+python evaluate.py --max-steps 10 --headless
 ```
 
 ---
 
-## 💡 Hybrid DOM + Screenshot Approach vs. Pure-Vision Agents
-
-### Why Hybrid DOM + Screenshots?
-1. **Token Efficiency & Speed**: 
-   Passing full high-resolution image frames to Multimodal Vision Models for every step can be token-heavy, slow, and expensive. Extracting a trimmed list of ~30 visible, interactive DOM elements (buttons, text inputs, links) provides immediate precise selectors directly to the LLM without high vision overhead.
-2. **Exact Element Selectors**:
-   Pure-vision agents rely on predicting (x, y) coordinates or bounding box overlays, which can misfire on dynamic, responsive, or scrolling layouts. DOM perception yields direct HTML attributes, IDs, and Playwright text locators.
-3. **Full Audit & Debugging Logs**:
-   While the decision engine runs on structured DOM elements, capturing a screenshot at every step (`logs/step_N.png`) provides complete visual audit logging, error troubleshooting, and step-by-step playback.
+## 📊 Evaluation Harness Tasks
+1. **Browse Category**: Select 'Travel' category link on `books.toscrape.com`.
+2. **Extract Price**: Identify first product price on `books.toscrape.com`.
+3. **Quote Extraction**: Extract first quote and author on `quotes.toscrape.com`.
+4. **Wikipedia Heading**: Locate main title on `wikipedia.org`.
+5. **Wikipedia Search**: Search for 'Artificial Intelligence' on `wikipedia.org`.
