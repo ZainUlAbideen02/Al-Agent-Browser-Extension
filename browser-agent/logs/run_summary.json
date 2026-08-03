@@ -1,144 +1,120 @@
 {
-  "goal": "Find and click the first blue action button (the top button in the container) and report its text label.",
-  "start_url": "https://the-internet.herokuapp.com/challenging_dom",
+  "goal": "Find and click the canvas button visually labeled 'CLICK ME TO WIN - TARGET'",
+  "start_url": "file:///c:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html",
   "mode": "hybrid",
-  "final_status": "Stuck: Action click on 'a:has-text(\"delete\")' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/challenging_dom#delete). Agent is stuck.",
-  "total_steps": 6,
-  "pure_dom_steps": 5,
+  "final_status": "Completed successfully: The goal has been successfully completed as the correct canvas button has been clicked.",
+  "total_steps": 5,
+  "pure_dom_steps": 4,
   "vision_fallback_steps": 1,
-  "vision_fallback_ratio": 0.17,
+  "vision_fallback_ratio": 0.2,
   "history": [
     {
       "step_num": 1,
       "action_taken": {
         "action": "click",
-        "selector": "a:has-text(\"edit\")",
+        "selector": "canvas[title='CLICK ME TO WIN - TARGET']",
         "x": null,
         "y": null,
         "text": null,
         "value": null,
-        "reasoning": "Click the first blue action button to start the process"
+        "reasoning": "The goal is to click the canvas button with the specified label, which is likely an interactive element on the page."
       },
       "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"edit\")'.",
-        "stale_element": false
+        "success": false,
+        "error_type": "selector_timeout",
+        "message": "Element 'canvas[title='CLICK ME TO WIN - TARGET']' was not found or not interactable within timeout.",
+        "stale_element": true
       },
       "screenshot_path": "logs\\step_1.png",
       "used_vision_fallback": false,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom",
-      "page_title": "The Internet"
+      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
+      "page_title": "Canvas UI Test Page"
     },
     {
       "step_num": 2,
       "action_taken": {
         "action": "click",
-        "selector": "a:has-text(\"delete\")",
+        "selector": "canvas[title='CLICK ME TO WIN - TARGET']",
         "x": null,
         "y": null,
         "text": null,
         "value": null,
-        "reasoning": "Click the second blue action button to continue the process"
+        "reasoning": "Try clicking the canvas button again, as it may be interactable on the second attempt"
       },
       "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"delete\")'.",
-        "stale_element": false
+        "success": false,
+        "error_type": "selector_timeout",
+        "message": "Element 'canvas[title='CLICK ME TO WIN - TARGET']' was not found or not interactable within timeout.",
+        "stale_element": true
       },
       "screenshot_path": "logs\\step_2.png",
       "used_vision_fallback": false,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom#edit",
-      "page_title": "The Internet"
+      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
+      "page_title": "Canvas UI Test Page"
     },
     {
       "step_num": 3,
       "action_taken": {
         "action": "click",
-        "selector": "a:has-text(\"delete\")",
+        "selector": "#canvasB",
         "x": null,
         "y": null,
         "text": null,
         "value": null,
-        "reasoning": "Click the second blue action button to continue the process"
+        "reasoning": "The screenshot shows two canvas elements. The top red one is labeled 'DO NOT CLICK - WRONG TARGET'. The bottom green one is labeled 'CLICK ME TO WIN - TARGET'. Since the previous attempts using a title attribute failed, and the target is the second canvas element, the correct selector is likely '#canvasB'."
       },
       "result": {
         "success": true,
         "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"delete\")'.",
+        "message": "Successfully clicked '#canvasB'.",
         "stale_element": false
       },
       "screenshot_path": "logs\\step_3.png",
-      "used_vision_fallback": false,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom#delete",
-      "page_title": "The Internet"
+      "used_vision_fallback": true,
+      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
+      "page_title": "Canvas UI Test Page"
     },
     {
       "step_num": 4,
       "action_taken": {
         "action": "click",
-        "selector": "a:has-text(\"delete\")",
+        "selector": "#canvasB",
         "x": null,
         "y": null,
         "text": null,
         "value": null,
-        "reasoning": "Click the second blue action button to continue the process"
+        "reasoning": "The correct canvas button to click is visually labeled 'CLICK ME TO WIN - TARGET' and has the id '#canvasB'."
       },
       "result": {
         "success": true,
         "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"delete\")'.",
+        "message": "Successfully clicked '#canvasB'.",
         "stale_element": false
       },
       "screenshot_path": "logs\\step_4.png",
       "used_vision_fallback": false,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom#delete",
-      "page_title": "The Internet"
+      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
+      "page_title": "Canvas Task Completed Successfully"
     },
     {
       "step_num": 5,
       "action_taken": {
-        "action": "click",
-        "selector": "a:has-text(\"delete\")",
+        "action": "done",
+        "selector": null,
         "x": null,
         "y": null,
         "text": null,
         "value": null,
-        "reasoning": "Click the second blue action button to continue the process"
+        "reasoning": "The goal has been successfully completed as the correct canvas button has been clicked."
       },
       "result": {
         "success": true,
-        "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"delete\")'.",
-        "stale_element": false
+        "message": "Done"
       },
       "screenshot_path": "logs\\step_5.png",
       "used_vision_fallback": false,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom#delete",
-      "page_title": "The Internet"
-    },
-    {
-      "step_num": 6,
-      "action_taken": {
-        "action": "click",
-        "selector": "a:has-text(\"delete\")",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Click the first blue action button in the container to start the process"
-      },
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Successfully clicked 'a:has-text(\"delete\")'.",
-        "stale_element": false
-      },
-      "screenshot_path": "logs\\step_6.png",
-      "used_vision_fallback": true,
-      "page_url": "https://the-internet.herokuapp.com/challenging_dom#delete",
-      "page_title": "The Internet"
+      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
+      "page_title": "Canvas Task Completed Successfully"
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 **Semester Project Final Technical Report**  
 **Author:** Browser Agent Engineering Team  
-**Date:** 2026-08-03 19:40:46  
+**Date:** 2026-08-03 21:03:05  
 **System Architecture:** Hybrid DOM Perception + Groq Dual-Model LLM (`openai/gpt-oss-120b` & `qwen/qwen3.6-27b`)
 
 ---
@@ -120,15 +120,16 @@ We conducted a complete **Ablation Study** executing all 9 benchmark tasks under
 
 | Task Name | Hybrid Passed | Pure-DOM Passed | Hybrid Steps | Pure-DOM Steps | Hybrid Vision Steps | Hybrid Time | Pure-DOM Time | Performance Impact |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Browse Category on BooksToScrape** | ✅ PASS | ✅ PASS | 2 | 3 | 0 | 10.17s | 24.53s | ⚡ 14.36s Faster |
-| **Extract Book Price** | ✅ PASS | ✅ PASS | 1 | 1 | 0 | 10.33s | 16.13s | ⚡ 5.8s Faster |
-| **Find Quote on QuotesToScrape** | ✅ PASS | ✅ PASS | 1 | 1 | 0 | 7.62s | 16.12s | ⚡ 8.5s Faster |
-| **Extract Wikipedia Main Heading** | ✅ PASS | ✅ PASS | 1 | 1 | 0 | 4.73s | 15.15s | ⚡ 10.42s Faster |
-| **Search Wikipedia Topic** | ✅ PASS | ✅ PASS | 3 | 3 | 0 | 24.68s | 32.25s | ⚡ 7.57s Faster |
-| **Modal Overlay / Cookie Banner (Entry Ad)** | ✅ PASS | ✅ PASS | 2 | 2 | 0 | 12.98s | 14.09s | ⚡ 1.11s Faster |
-| **Dropdown Select Interaction** | ✅ PASS | ✅ PASS | 2 | 2 | 0 | 11.48s | 10.18s | 1.3s Slower |
-| **Dynamic Loading / Lazy DOM Element** | ✅ PASS | ✅ PASS | 4 | 4 | 0 | 21.15s | 22.1s | Equal |
-| **Challenging DOM & Duplicate Elements** | ✅ PASS | ✅ PASS | 2 | 4 | 0 | 16.03s | 69.66s | ⚡ 53.63s Faster |
+| **Browse Category on BooksToScrape** | ❌ FAIL | ✅ PASS | 0 | 3 | 0 | 0s | 24.53s | Equal |
+| **Non-DOM Canvas UI Visual Disambiguation** | ❌ FAIL | ❌ FAIL | 0 | 0 | 0 | 0s | 0s | Equal |
+| **Extract Book Price** | ❌ FAIL | ✅ PASS | 0 | 1 | 0 | 0s | 16.13s | Equal |
+| **Find Quote on QuotesToScrape** | ❌ FAIL | ✅ PASS | 0 | 1 | 0 | 0s | 16.12s | Equal |
+| **Extract Wikipedia Main Heading** | ❌ FAIL | ✅ PASS | 0 | 1 | 0 | 0s | 15.15s | Equal |
+| **Search Wikipedia Topic** | ❌ FAIL | ✅ PASS | 0 | 3 | 0 | 0s | 32.25s | Equal |
+| **Modal Overlay / Cookie Banner (Entry Ad)** | ❌ FAIL | ✅ PASS | 0 | 2 | 0 | 0s | 14.09s | Equal |
+| **Dropdown Select Interaction** | ✅ PASS | ✅ PASS | 0 | 2 | 0 | 0s | 10.18s | Equal |
+| **Dynamic Loading / Lazy DOM Element** | ❌ FAIL | ✅ PASS | 0 | 4 | 0 | 0s | 22.1s | Equal |
+| **Challenging DOM & Duplicate Elements** | ❌ FAIL | ✅ PASS | 0 | 4 | 0 | 0s | 69.66s | Equal |
 
 ---
 
@@ -137,7 +138,7 @@ We conducted a complete **Ablation Study** executing all 9 benchmark tasks under
 | Metric | Hybrid Mode (DOM + Vision) | Pure-DOM Mode (Ablation) | Performance Variance / Delta |
 | :--- | :---: | :---: | :--- |
 | **Benchmark Success Rate** | **9 / 9 (100.0%)** | **9 / 9 (100.0%)** | 100% Task Completion across both modes |
-| **Total Benchmark Suite Time** | **119.17s** | **220.22s** | **⚡ 101.05s Faster (45.9% Total Speedup)** |
+| **Total Benchmark Suite Time** | **831.57s** | **220.22s** | **⚡ -611.35s Faster (-277.6% Total Speedup)** |
 | **Challenging DOM Task Time** | **16.03s** | **69.66s** | **⚡ 53.63s Faster (76.9% Latency Reduction)** |
 | **Modal Overlay Task Time** | **12.98s** | **14.09s** | **⚡ 1.11s Faster** |
 | **Native Dropdown Select Task** | **11.48s (PASS)** | **10.18s (PASS)** | Both modes rescued by `select_option()` fix |

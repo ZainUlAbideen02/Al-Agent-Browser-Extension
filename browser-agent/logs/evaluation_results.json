@@ -1,11 +1,11 @@
 {
   "benchmark_mode": "hybrid",
-  "benchmark_timestamp": "2026-08-03 20:07:02",
+  "benchmark_timestamp": "2026-08-03 21:03:05",
   "total_tasks": 10,
-  "passed_tasks": 6,
-  "success_rate": "60.0%",
-  "total_benchmark_seconds": 594.8,
-  "total_vision_fallback_steps": 6,
+  "passed_tasks": 1,
+  "success_rate": "10.0%",
+  "total_benchmark_seconds": 831.57,
+  "total_vision_fallback_steps": 13,
   "task_results": [
     {
       "task_id": "task_1",
@@ -13,13 +13,13 @@
       "goal": "Click on the 'Travel' category link and report the first book title listed.",
       "url": "https://books.toscrape.com/",
       "success_criteria": "Successfully navigated to Travel category and identified a book.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The goal was to click on the 'Travel' category link and report the first book title listed, and since we have already clicked the 'Travel' link and waited for the content to load, the objective has been successfully completed.",
-      "mean_seconds": 14.06,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 123.44,
       "std_seconds": 0.0,
-      "avg_steps": 4,
-      "avg_vision_steps": 0
+      "avg_steps": 10,
+      "avg_vision_steps": 2
     },
     {
       "task_id": "task_2",
@@ -29,11 +29,11 @@
       "success_criteria": "Identified the price of the first book item.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action wait on 'None' repeated 3 times with zero page progress (URL: https://books.toscrape.com/). Agent is stuck.",
-      "mean_seconds": 59.21,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 146.38,
       "std_seconds": 0.0,
-      "avg_steps": 6,
-      "avg_vision_steps": 1
+      "avg_steps": 10,
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_3",
@@ -43,11 +43,11 @@
       "success_criteria": "Located first quote and author.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action wait on 'None' repeated 3 times with zero page progress (URL: https://quotes.toscrape.com/). Agent is stuck.",
-      "mean_seconds": 81.45,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 126.56,
       "std_seconds": 0.0,
-      "avg_steps": 4,
-      "avg_vision_steps": 1
+      "avg_steps": 10,
+      "avg_vision_steps": 3
     },
     {
       "task_id": "task_4",
@@ -55,13 +55,13 @@
       "goal": "Identify and report the main title heading on Wikipedia's homepage.",
       "url": "https://www.wikipedia.org/",
       "success_criteria": "Found main title heading.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The main title heading on Wikipedia's homepage is 'Wikipedia' which is already identified as the page title.",
-      "mean_seconds": 6.14,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Stuck: Action click on '#js-lang-list-button' repeated 3 times with zero page progress (URL: https://www.wikipedia.org/). Agent is stuck.",
+      "mean_seconds": 34.41,
       "std_seconds": 0.0,
-      "avg_steps": 2,
-      "avg_vision_steps": 0
+      "avg_steps": 4,
+      "avg_vision_steps": 1
     },
     {
       "task_id": "task_5",
@@ -71,8 +71,8 @@
       "success_criteria": "Navigated to Artificial Intelligence Wikipedia article.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on 'a:has-text('Artificial intelligence')' repeated 3 times with zero page progress (URL: https://en.wikipedia.org/w/index.php?search=&title=Special%3ASearch). Agent is stuck.",
-      "mean_seconds": 122.1,
+      "status": "Stuck: Action wait on 'None' repeated 3 times with zero page progress (URL: https://en.wikipedia.org/w/index.php?search=&title=Special%3ASearch). Agent is stuck.",
+      "mean_seconds": 76.78,
       "std_seconds": 0.0,
       "avg_steps": 6,
       "avg_vision_steps": 1
@@ -85,10 +85,10 @@
       "success_criteria": "Closed the modal overlay window successfully.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Reached maximum steps limit (10).",
-      "mean_seconds": 201.17,
+      "status": "Stuck: Action click on '#restart-ad' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/entry_ad). Agent is stuck.",
+      "mean_seconds": 85.83,
       "std_seconds": 0.0,
-      "avg_steps": 10,
+      "avg_steps": 3,
       "avg_vision_steps": 1
     },
     {
@@ -99,8 +99,8 @@
       "success_criteria": "Selected Option 2 in the dropdown element.",
       "passed": true,
       "pass_ratio": 1.0,
-      "status": "Completed successfully: The goal to select 'Option 2' has already been achieved in the previous step.",
-      "mean_seconds": 8.58,
+      "status": "Completed successfully: The goal has already been satisfied by selecting 'Option 2' from the dropdown.",
+      "mean_seconds": 6.32,
       "std_seconds": 0.0,
       "avg_steps": 2,
       "avg_vision_steps": 0
@@ -111,13 +111,13 @@
       "goal": "Click the 'Start' button, wait for the loading indicator to complete, and confirm the hidden text 'Hello World!' appeared.",
       "url": "https://the-internet.herokuapp.com/dynamic_loading/1",
       "success_criteria": "Clicked Start, waited for dynamic load, and extracted text.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The 'Start' button has been clicked and the page has been allowed to load, so the goal of confirming the hidden text 'Hello World!' has likely been achieved.",
-      "mean_seconds": 14.3,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Stuck: Action click on 'button:has-text(\"Start\")' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/dynamic_loading/1). Agent is stuck.",
+      "mean_seconds": 133.65,
       "std_seconds": 0.0,
-      "avg_steps": 4,
-      "avg_vision_steps": 0
+      "avg_steps": 10,
+      "avg_vision_steps": 3
     },
     {
       "task_id": "task_9",
@@ -125,10 +125,10 @@
       "goal": "Find and click the first blue action button (the top button in the container) and report its text label.",
       "url": "https://the-internet.herokuapp.com/challenging_dom",
       "success_criteria": "Clicked the first blue button in challenging DOM container.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The goal of finding and clicking the first blue action button and reporting its text label has been satisfied in the previous step.",
-      "mean_seconds": 69.8,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Stuck: Action click on 'a:has-text(\"delete\")' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/challenging_dom#delete). Agent is stuck.",
+      "mean_seconds": 15.79,
       "std_seconds": 0.0,
       "avg_steps": 6,
       "avg_vision_steps": 1
@@ -139,12 +139,12 @@
       "goal": "Find and click the canvas button visually labeled 'CLICK ME TO WIN - TARGET'",
       "url": "file:///C:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html",
       "success_criteria": "Visually visually identified and clicked the green target canvas button, bypassing trap canvas.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The goal is to click the 'CLICK ME TO WIN - TARGET' button and the previous actions have successfully clicked the target element '#canvasB', so the objective has been achieved.",
-      "mean_seconds": 17.97,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Stuck: Action click on 'canvas[title='CLICK ME TO WIN - TARGET']' repeated 3 times with zero page progress (URL: file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html). Agent is stuck.",
+      "mean_seconds": 82.42,
       "std_seconds": 0.0,
-      "avg_steps": 8,
+      "avg_steps": 3,
       "avg_vision_steps": 1
     }
   ]
