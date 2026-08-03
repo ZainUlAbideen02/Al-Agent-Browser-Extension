@@ -1,0 +1,10 @@
+{
+  "goal": "Find and report the first quote text and author name on the homepage.",
+  "start_url": "https://quotes.toscrape.com/",
+  "final_status": "Failed with exception: Failed to obtain valid response from LLM after 3 attempts. Last error: \n  No API_KEY or ADC found. Please either:\n    - Set the `GOOGLE_API_KEY` environment variable.\n    - Manually pass the key with `genai.configure(api_key=my_api_key)`.\n    - Or set up Application Default Credentials, see https://ai.google.dev/gemini-api/docs/oauth for more information.",
+  "total_steps": 0,
+  "pure_dom_steps": 0,
+  "vision_fallback_steps": 0,
+  "vision_fallback_ratio": 0.0,
+  "history": []
+}
