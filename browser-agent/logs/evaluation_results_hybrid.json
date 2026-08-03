@@ -1,11 +1,11 @@
 {
   "benchmark_mode": "hybrid",
-  "benchmark_timestamp": "2026-08-03 21:03:05",
+  "benchmark_timestamp": "2026-08-03 21:45:45",
   "total_tasks": 10,
-  "passed_tasks": 1,
-  "success_rate": "10.0%",
-  "total_benchmark_seconds": 831.57,
-  "total_vision_fallback_steps": 13,
+  "passed_tasks": 0,
+  "success_rate": "0.0%",
+  "total_benchmark_seconds": 1476.38,
+  "total_vision_fallback_steps": 0,
   "task_results": [
     {
       "task_id": "task_1",
@@ -16,10 +16,10 @@
       "passed": false,
       "pass_ratio": 0.0,
       "status": "Reached maximum steps limit (10).",
-      "mean_seconds": 123.44,
+      "mean_seconds": 92.68,
       "std_seconds": 0.0,
       "avg_steps": 10,
-      "avg_vision_steps": 2
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_2",
@@ -30,7 +30,7 @@
       "passed": false,
       "pass_ratio": 0.0,
       "status": "Reached maximum steps limit (10).",
-      "mean_seconds": 146.38,
+      "mean_seconds": 130.09,
       "std_seconds": 0.0,
       "avg_steps": 10,
       "avg_vision_steps": 0
@@ -44,10 +44,10 @@
       "passed": false,
       "pass_ratio": 0.0,
       "status": "Reached maximum steps limit (10).",
-      "mean_seconds": 126.56,
+      "mean_seconds": 138.94,
       "std_seconds": 0.0,
       "avg_steps": 10,
-      "avg_vision_steps": 3
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_4",
@@ -57,11 +57,11 @@
       "success_criteria": "Found main title heading.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on '#js-lang-list-button' repeated 3 times with zero page progress (URL: https://www.wikipedia.org/). Agent is stuck.",
-      "mean_seconds": 34.41,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 220.37,
       "std_seconds": 0.0,
-      "avg_steps": 4,
-      "avg_vision_steps": 1
+      "avg_steps": 10,
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_5",
@@ -71,11 +71,11 @@
       "success_criteria": "Navigated to Artificial Intelligence Wikipedia article.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action wait on 'None' repeated 3 times with zero page progress (URL: https://en.wikipedia.org/w/index.php?search=&title=Special%3ASearch). Agent is stuck.",
-      "mean_seconds": 76.78,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 225.0,
       "std_seconds": 0.0,
-      "avg_steps": 6,
-      "avg_vision_steps": 1
+      "avg_steps": 10,
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_6",
@@ -85,11 +85,11 @@
       "success_criteria": "Closed the modal overlay window successfully.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on '#restart-ad' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/entry_ad). Agent is stuck.",
-      "mean_seconds": 85.83,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 266.71,
       "std_seconds": 0.0,
-      "avg_steps": 3,
-      "avg_vision_steps": 1
+      "avg_steps": 10,
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_7",
@@ -97,12 +97,12 @@
       "goal": "Select 'Option 2' from the dropdown select element on the page.",
       "url": "https://the-internet.herokuapp.com/dropdown",
       "success_criteria": "Selected Option 2 in the dropdown element.",
-      "passed": true,
-      "pass_ratio": 1.0,
-      "status": "Completed successfully: The goal has already been satisfied by selecting 'Option 2' from the dropdown.",
-      "mean_seconds": 6.32,
+      "passed": false,
+      "pass_ratio": 0.0,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 28.27,
       "std_seconds": 0.0,
-      "avg_steps": 2,
+      "avg_steps": 10,
       "avg_vision_steps": 0
     },
     {
@@ -113,11 +113,11 @@
       "success_criteria": "Clicked Start, waited for dynamic load, and extracted text.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on 'button:has-text(\"Start\")' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/dynamic_loading/1). Agent is stuck.",
-      "mean_seconds": 133.65,
+      "status": "Reached maximum steps limit (10).",
+      "mean_seconds": 198.42,
       "std_seconds": 0.0,
       "avg_steps": 10,
-      "avg_vision_steps": 3
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_9",
@@ -127,11 +127,11 @@
       "success_criteria": "Clicked the first blue button in challenging DOM container.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on 'a:has-text(\"delete\")' repeated 3 times with zero page progress (URL: https://the-internet.herokuapp.com/challenging_dom#delete). Agent is stuck.",
-      "mean_seconds": 15.79,
+      "status": "Failed with exception: Failed to obtain valid response from Groq API after 3 attempts. Last error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.1-8b-instant` in organization `org_01kt4ams0yfjq92rpaknkw9mgd` service tier `on_demand` on tokens per minute (TPM): Limit 6000, Used 5631, Requested 950. Please try again in 5.81s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+      "mean_seconds": 47.58,
       "std_seconds": 0.0,
-      "avg_steps": 6,
-      "avg_vision_steps": 1
+      "avg_steps": 0,
+      "avg_vision_steps": 0
     },
     {
       "task_id": "task_10",
@@ -141,11 +141,11 @@
       "success_criteria": "Visually visually identified and clicked the green target canvas button, bypassing trap canvas.",
       "passed": false,
       "pass_ratio": 0.0,
-      "status": "Stuck: Action click on 'canvas[title='CLICK ME TO WIN - TARGET']' repeated 3 times with zero page progress (URL: file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html). Agent is stuck.",
-      "mean_seconds": 82.42,
+      "status": "Failed with exception: Failed to obtain valid response from Groq API after 3 attempts. Last error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.1-8b-instant` in organization `org_01kt4ams0yfjq92rpaknkw9mgd` service tier `on_demand` on tokens per minute (TPM): Limit 6000, Used 5749, Requested 947. Please try again in 6.96s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+      "mean_seconds": 128.32,
       "std_seconds": 0.0,
-      "avg_steps": 3,
-      "avg_vision_steps": 1
+      "avg_steps": 4,
+      "avg_vision_steps": 0
     }
   ]
 }

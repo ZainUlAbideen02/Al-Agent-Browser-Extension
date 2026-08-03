@@ -8,7 +8,7 @@ logger = logging.getLogger("browser_agent.agent.reasoner")
 class VisualActionDecision(BaseModel):
     """Pydantic schema for Pure Visual Computer-Use Agent action decision."""
     thought: str = Field(
-        ...,
+        default="Analyzing visual screenshot context.",
         description="Detailed visual analysis of the screenshot, identifying buttons, input fields, dropdowns, or canvas elements."
     )
     action: Literal["click", "type", "key", "scroll", "drag_and_drop", "wait", "done"] = Field(
@@ -25,42 +25,37 @@ class VisualActionDecision(BaseModel):
     end_y: Optional[int] = Field(None, description="Drag end Y coordinate.")
 
 class ActionDecision(BaseModel):
-    """Legacy schema supporting DOM perception and fallback calls."""
+    """Schema supporting DOM perception and fallback calls."""
     action: Literal["click", "click_coordinate", "type", "select", "scroll", "wait", "done"] = Field(
-        description="The action type to perform."
+        ...,
+        description="The action type to perform. Must be one of: click, click_coordinate, type, select, scroll, wait, done."
     )
     selector: Optional[str] = Field(default=None)
     x: Optional[int] = Field(default=None)
     y: Optional[int] = Field(default=None)
     text: Optional[str] = Field(default=None)
     value: Optional[str] = Field(default=None)
-    reasoning: str = Field(description="Reasoning explaining why this action was chosen.")
+    reasoning: Optional[str] = Field(default="Executing next action step.")
 
-SYSTEM_PROMPT_VISUAL = """You are an expert AI Visual Computer-Use Agent.
-You control a web browser purely by observing high-resolution page screenshots and issuing physical mouse and keyboard actions.
+SYSTEM_PROMPT_VISUAL = """You are a visual computer-use agent controlling a web browser strictly via screenshots.
+Current Active Viewport: {viewport_width}px wide x {viewport_height}px high.
 
-Active Browser Viewport: {viewport_width} x {viewport_height} pixels.
-
-Coordinate Rules:
-- All (x, y) coordinates must be integers within [0, {max_x}] for X and [0, {max_y}] for Y.
-- Coordinates represent exact pixel center locations on the provided screenshot image.
-
-Available Physical Actions:
-1. "click": Click at center pixel coordinates (specify integer 'x' and 'y').
-2. "type": Type text string (specify 'x' and 'y' to focus input box, and 'text' string to enter).
-3. "key": Press a single keyboard key like 'Enter', 'Tab', 'Backspace', or 'Escape' (specify key name in 'text').
-4. "scroll": Scroll page (specify 'direction': "up", "down", "left", "right").
-5. "drag_and_drop": Click and drag from ('start_x', 'start_y') to ('end_x', 'end_y').
-6. "wait": Pause 2 seconds for page or results to load.
-7. "done": Declare that the objective is fully completed.
-
-Output strictly valid JSON matching this schema:
+INSTRUCTIONS:
+1. Analyze the screenshot to locate visual targets.
+2. Identify visual bounding boxes of elements (buttons, inputs, dropdowns, canvas items).
+3. Calculate the center (X, Y) pixel coordinates strictly within 0..{max_x} (X) and 0..{max_y} (Y).
+4. FORM FILLING PROCEDURE:
+   - To fill an input box: specify 'click' or 'type' with the field's center (X,Y) coordinates.
+   - Include the text to type in the 'text' key.
+   - Follow up with 'key' -> 'Tab' to move to the next field, or 'key' -> 'Enter' to submit.
+5. If popups/ads block the target, click the 'X' button or click outside the modal.
+6. Output strictly valid JSON matching the schema:
 {{
   "thought": "<detailed visual analysis of the screenshot identifying target buttons, inputs, text>",
   "action": "click" | "type" | "key" | "scroll" | "drag_and_drop" | "wait" | "done",
   "x": 640 or null,
   "y": 400 or null,
-  "text": "search query" or null,
+  "text": "text string or key name" or null,
   "direction": "down" or null,
   "start_x": null,
   "start_y": null,
@@ -73,19 +68,27 @@ Do NOT output any markdown formatting or extra text outside the JSON object.
 SYSTEM_PROMPT_DOM = """You are an AI web automation agent. Your goal is to complete a user task on a web page by taking one step at a time.
 
 Available Actions:
-1. "click": Click an interactive element specified by its 'selector' (use for buttons, links, non-native custom dropdowns).
-2. "click_coordinate": Click at specific (x, y) pixel coordinates (specify integer 'x' and 'y' fields).
+1. "click": Click an interactive element specified by its 'selector' (use for buttons, links, login submit buttons).
+2. "click_coordinate": Click at specific (x, y) pixel coordinates.
 3. "type": Focus an element specified by its 'selector' and type the specified 'text'.
-4. "select": Choose an option from a native HTML <select> element by specifying its 'selector' and option label/value in 'value' (e.g. selector: "#dropdown", value: "Option 2").
-5. "scroll": Scroll the page down or up (selector can be "down" or "up").
-6. "wait": Pause briefly (2 seconds) to allow dynamic contents or search results to load.
-7. "done": Declare that the objective has been successfully completed.
+4. "select": Choose an option from a native HTML <select> element.
+5. "scroll": Scroll page down or up.
+6. "wait": Pause 2 seconds.
+7. "done": Declare completion.
 
 Rules:
-- For native HTML <select> dropdown elements, ALWAYS use the "select" action with the target option label/value in 'value'. Do NOT try to click options inside a select dropdown.
-- Use the exact 'selector' provided for the target element.
-- If the goal is satisfied, choose "done".
-- Output strictly valid JSON.
+- For multi-step forms: Once you type into a field (e.g. #username or #password), DO NOT type into that same field again. Immediately click the submit/Login button (`button[type="submit"]` or `button.radius` or `button:has-text("Login")`).
+- If the current page URL or title indicates success (e.g. page redirected to /secure or logged in or target reached), output "done".
+- Output strictly valid JSON matching this schema:
+{
+  "action": "click" | "click_coordinate" | "type" | "select" | "scroll" | "wait" | "done",
+  "selector": "<exact locator string or null>",
+  "x": null,
+  "y": null,
+  "text": "<text to enter if action is type else null>",
+  "value": "<option value/label to choose if action is select else null>",
+  "reasoning": "<short sentence explaining why>"
+}
 """
 
 class ReasonerAgent(BaseAgent):
@@ -113,17 +116,17 @@ class ReasonerAgent(BaseAgent):
             max_y=max_y
         )
 
-        user_message = f"""Current Task Goal: "{goal}"
+        user_message = f"""User Goal: "{goal}"
 
 Current Page URL: {visual_state.get('current_url', 'N/A')}
 Current Page Title: {visual_state.get('page_title', 'N/A')}
 Viewport Dimensions: {vw}x{vh} pixels
 
-Action History (Recent steps):
+Execution History (Last 5 steps):
 {history_summary}
 
 Analyze the attached screenshot carefully. Determine the exact next visual action to execute.
-Output strictly valid JSON.
+Output strictly valid JSON matching the schema.
 """
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -136,7 +139,6 @@ Output strictly valid JSON.
                 )
                 decision_obj = VisualActionDecision(**raw_decision)
                 result = decision_obj.model_dump()
-                # Map reasoning for legacy compatibility
                 result["reasoning"] = result.get("thought", "")
                 logger.info(f"Visual Decision: Action={result['action']} | Coords=({result.get('x')}, {result.get('y')}) | Thought: {result['thought'][:60]}...")
                 return result
@@ -144,7 +146,7 @@ Output strictly valid JSON.
                 logger.warning(f"Pydantic Visual validation failed (attempt {attempt + 1}): {ve}")
                 if attempt == max_retries:
                     raise RuntimeError(f"Visual action decision failed validation: {ve}") from ve
-                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please fix JSON schema output.]"
+                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please output valid JSON matching fields: thought, action, x, y, text, direction.]"
             except Exception as e:
                 logger.error(f"Error deciding visual action: {e}")
                 raise
@@ -196,7 +198,8 @@ Interactive Elements on Page (~{len(elements)} items):
 Action History (Recent steps):
 {history_summary}
 
-Analyze the current page state, goal, and past actions. Respond strictly in JSON format.
+Analyze the current page state, goal, and past actions. Choose action from: "click", "click_coordinate", "type", "select", "scroll", "wait", "done".
+Output strictly valid JSON with keys: "action", "selector", "x", "y", "text", "value", "reasoning".
 """
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -212,7 +215,7 @@ Analyze the current page state, goal, and past actions. Respond strictly in JSON
                 logger.warning(f"Pydantic DOM validation failed (attempt {attempt + 1}): {ve}")
                 if attempt == max_retries:
                     raise RuntimeError(f"Action decision failed validation: {ve}") from ve
-                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please fix JSON format.]"
+                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please fix JSON output format with fields: action, selector, reasoning.]"
             except Exception as e:
                 logger.error(f"Error deciding action via DOM: {e}")
                 raise

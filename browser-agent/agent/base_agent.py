@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import base64
 import logging
@@ -36,11 +37,12 @@ class BaseAgent:
         system_prompt: str,
         user_message: str,
         expect_json: bool = True,
-        max_retries: int = 2,
+        max_retries: int = 3,
         image_path: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         Call Groq API with system/user prompt, optional base64 image payload, and JSON retry logic.
+        Includes model fallback logic for vision rate limits.
         """
         is_vision = False
         encoded_image = None
@@ -91,7 +93,6 @@ class BaseAgent:
                     "messages": messages,
                     "temperature": 0.1,
                 }
-                # Groq strictly enforces json_object for text models, but can fail 400 on vision models if format payload is rigid
                 if expect_json and not is_vision:
                     kwargs["response_format"] = {"type": "json_object"}
 
@@ -116,6 +117,15 @@ class BaseAgent:
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"Groq API call attempt {attempt + 1} failed: {e}")
+
+                if is_vision and "qwen" in model_name.lower() and ("Rate limit" in last_error or "429" in last_error):
+                    logger.info("Switching vision model fallback to llama-3.2-11b-vision-preview...")
+                    model_name = "llama-3.2-11b-vision-preview"
+
+                if "429" in last_error or "Rate limit" in last_error or "tokens" in last_error:
+                    logger.info("Groq API rate limit hit (429). Sleeping 5 seconds for rate limit bucket replenishment...")
+                    time.sleep(5.0)
+
                 if attempt == max_retries:
                     raise RuntimeError(
                         f"Failed to obtain valid response from Groq API after {max_retries + 1} attempts. Last error: {last_error}"

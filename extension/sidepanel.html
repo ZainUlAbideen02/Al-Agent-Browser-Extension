@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Browser Agent</title>
+    <title>Visual Agent Side Panel</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -106,7 +106,6 @@
         }
 
         .badge-vision { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid #8b5cf6; }
-        .badge-dom { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 
         .stream-container {
             width: 100%;
@@ -118,6 +117,7 @@
             justify-content: center;
             overflow: hidden;
             border: 1px solid var(--border-color);
+            position: relative;
         }
 
         .stream-img {
@@ -156,7 +156,7 @@
 <body>
     <div class="header">
         <div class="title">
-            <span>🤖 AI Browser Agent</span>
+            <span>👁️ Visual Agent Monitor</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
             <span class="status-dot disconnected" id="statusDot"></span>
@@ -165,30 +165,33 @@
     </div>
 
     <div class="card">
+        <label for="targetUrl">Target URL</label>
+        <input type="text" id="targetUrl" placeholder="Auto-detected active tab URL...">
+
         <label for="goal">Objective</label>
-        <textarea id="goal" rows="2" placeholder="Goal for active tab...">Extract book title and price on page.</textarea>
+        <textarea id="goal" rows="2" placeholder="Goal for active tab...">Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button</textarea>
         
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
             <div>
-                <label for="mode">Mode</label>
-                <select id="mode">
-                    <option value="hybrid">Hybrid Mode</option>
-                    <option value="dom">Pure DOM</option>
+                <label for="resolution">Resolution</label>
+                <select id="resolution">
+                    <option value="1280x800">1280 x 800</option>
+                    <option value="1920x1080">1920 x 1080</option>
                 </select>
             </div>
             <div>
-                <label for="maxSteps">Steps</label>
-                <input type="number" id="maxSteps" value="10" min="1" max="20">
+                <label for="maxSteps">Max Steps</label>
+                <input type="number" id="maxSteps" value="15" min="1" max="30">
             </div>
         </div>
 
-        <button id="startBtn">▶ Run Agent on Active Tab</button>
+        <button id="startBtn">▶ Run Visual Agent</button>
     </div>
 
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <label>Live Stream</label>
-            <span class="badge badge-vision" id="visionBadge" style="display:none;">👁️ Vision Active</span>
+            <span class="badge badge-vision">👁️ Visual Agent Active</span>
         </div>
         <div class="stream-container">
             <span id="placeholderText" style="color:var(--text-secondary); font-size:11px;">Waiting for stream...</span>

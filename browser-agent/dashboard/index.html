@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browser Agent Control & Telemetry Dashboard</title>
+    <title>Visual Computer-Use Agent Control & Telemetry Dashboard</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,10 +14,10 @@
         <!-- Header Bar -->
         <header class="app-header">
             <div class="logo-container">
-                <span class="agent-icon">🤖</span>
+                <span class="agent-icon">👁️</span>
                 <div>
-                    <h1>Browser Agent Dashboard</h1>
-                    <p class="subtitle">Hybrid DOM Perception & Multimodal Vision Fallback Control</p>
+                    <h1>Visual Agent Control Dashboard</h1>
+                    <p class="subtitle">Pure Visual Computer-Use & Hardware Coordinate Overlay</p>
                 </div>
             </div>
             <div class="status-bar">
@@ -36,31 +36,36 @@
                 <form id="agentForm">
                     <div class="form-group">
                         <label for="targetUrl">Target Web URL</label>
-                        <input type="url" id="targetUrl" placeholder="https://books.toscrape.com/" required value="https://books.toscrape.com/">
+                        <input type="url" id="targetUrl" placeholder="https://the-internet.herokuapp.com/login" required value="https://the-internet.herokuapp.com/login">
                     </div>
 
                     <div class="form-group">
                         <label for="goal">Natural Language Objective</label>
-                        <textarea id="goal" rows="3" placeholder="Describe what the agent should accomplish..." required>Click on the 'Travel' category link and report the first book title listed.</textarea>
+                        <textarea id="goal" rows="3" placeholder="Describe what the agent should accomplish..." required>Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button</textarea>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="mode">Perception Mode</label>
-                            <select id="mode">
-                                <option value="hybrid">Hybrid (DOM + Vision Fallback)</option>
-                                <option value="dom">Pure DOM (Ablation)</option>
+                            <label for="resolution">Viewport Resolution</label>
+                            <select id="resolution">
+                                <option value="1280x800" selected>1280 x 800 (HD)</option>
+                                <option value="1920x1080">1920 x 1080 (FHD)</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <label for="maxSteps">Max Steps</label>
-                            <input type="number" id="maxSteps" min="1" max="30" value="10">
+                            <input type="number" id="maxSteps" min="1" max="30" value="15">
                         </div>
                     </div>
 
-                    <button type="submit" id="startBtn" class="btn btn-primary">
-                        <span>▶ Start Autonomous Agent</span>
-                    </button>
+                    <div class="btn-group">
+                        <button type="submit" id="startBtn" class="btn btn-primary">
+                            <span>▶ Launch Task</span>
+                        </button>
+                        <button type="button" id="stopBtn" class="btn btn-danger" disabled>
+                            <span>⏹ Stop Task</span>
+                        </button>
+                    </div>
                 </form>
 
                 <!-- Active Task Stats -->
@@ -79,23 +84,28 @@
                         <span class="stat-value" id="stepsVal">0 / 0</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Vision Fallbacks:</span>
-                        <span class="stat-value" id="visionCountVal">0</span>
+                        <span class="stat-label">Last Target Coords:</span>
+                        <span class="stat-value" id="coordsVal">None</span>
                     </div>
                 </div>
             </section>
 
-            <!-- Middle Column: Visual Preview -->
+            <!-- Middle Column: Visual Live Preview & Target Cursor Overlay -->
             <section class="panel preview-panel">
                 <div class="panel-header">
-                    <h2>📸 Live Visual Screen Stream</h2>
-                    <span class="badge badge-vision" id="visionModeBadge" style="display:none;">👁️ Vision Active</span>
+                    <h2>📸 Live Screen & Coordinate Target Overlay</h2>
+                    <span class="badge badge-vision" id="visionModeBadge">👁️ Visual Agent Active</span>
                 </div>
-                <div class="preview-container">
+                <div class="preview-container" id="previewContainer">
                     <div class="preview-placeholder" id="previewPlaceholder">
                         <span>Waiting for live screenshot telemetry stream...</span>
                     </div>
                     <img id="livePreviewImg" class="preview-img" style="display: none;" alt="Live Browser View">
+                    <!-- Target Coordinate Marker Overlay -->
+                    <div id="targetOverlayMarker" class="target-marker" style="display: none;">
+                        <div class="marker-pulse"></div>
+                        <div class="marker-label" id="markerLabel">(0, 0)</div>
+                    </div>
                 </div>
                 <div class="preview-meta">
                     <span id="previewPageUrl">URL: N/A</span>

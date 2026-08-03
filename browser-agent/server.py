@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser_agent.server")
 
 app = FastAPI(
-    title="Browser Agent Telemetry & Control API",
-    description="Real-time control and telemetry streaming backend for hybrid AI browser agent.",
+    title="Visual Browser Agent Telemetry & Control API",
+    description="Real-time control and telemetry streaming backend for pure visual AI browser agent.",
     version="1.0.0"
 )
 
@@ -37,8 +37,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage for tasks
+# In-memory storage for active tasks
 task_store: Dict[str, Dict[str, Any]] = {}
+active_tasks: Dict[str, asyncio.Task] = {}
 
 class ConnectionManager:
     """Manages active WebSocket telemetry streaming client connections."""
@@ -69,34 +70,36 @@ class ConnectionManager:
             self.disconnect(conn)
 
 manager = ConnectionManager()
-
-# Event loop handle for broadcasting from sync thread
 loop_handle: Optional[asyncio.AbstractEventLoop] = None
 
 @app.on_event("startup")
 async def startup_event():
     global loop_handle
     loop_handle = asyncio.get_running_loop()
-    logger.info("FastAPI Telemetry Server Started.")
+    logger.info("FastAPI Visual Telemetry Server Started.")
 
 def sync_step_callback(frame_data: Dict[str, Any]):
     """Sync callback invoked by run_agent step loop to broadcast over WebSocket."""
     global loop_handle
     if loop_handle and loop_handle.is_running():
+        # Ensure event key matches spec
+        frame_data["event"] = "step_update"
         asyncio.run_coroutine_threadsafe(manager.broadcast(frame_data), loop_handle)
 
 class StartAgentRequest(BaseModel):
-    url: str = Field(..., example="https://books.toscrape.com/")
-    goal: str = Field(..., example="Find and report the price of the first book.")
-    max_steps: int = Field(default=10, ge=1, le=30)
-    mode: str = Field(default="hybrid", example="hybrid")  # 'hybrid' or 'dom'
+    url: str = Field(..., example="https://the-internet.herokuapp.com/login")
+    goal: str = Field(..., example="Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button")
+    max_steps: int = Field(default=15, ge=1, le=30)
+    width: int = Field(default=1280, ge=640, le=2560)
+    height: int = Field(default=800, ge=480, le=1440)
+    mode: str = Field(default="hybrid", example="hybrid")
 
 class StartAgentResponse(BaseModel):
     task_id: str
     status: str
     message: str
 
-def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, disable_vision: bool):
+def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, width: int, height: int, disable_vision: bool):
     """Worker wrapper executed in background thread."""
     task_store[task_id]["status"] = "running"
     try:
@@ -118,7 +121,7 @@ def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, disabl
 
 @app.post("/api/agent/start", response_model=StartAgentResponse)
 async def start_agent(request: StartAgentRequest):
-    task_id = str(uuid.uuid4())[:8]
+    task_id = str(uuid.uuid4())
     disable_vision = (request.mode.lower() == "dom")
 
     task_store[task_id] = {
@@ -126,27 +129,32 @@ async def start_agent(request: StartAgentRequest):
         "goal": request.goal,
         "url": request.url,
         "max_steps": request.max_steps,
+        "width": request.width,
+        "height": request.height,
         "mode": request.mode,
-        "status": "queued",
+        "status": "started",
         "summary": None,
         "error": None
     }
 
     # Run agent in background thread to avoid blocking FastAPI event loop
-    asyncio.create_task(
+    async_task = asyncio.create_task(
         asyncio.to_thread(
             execute_agent_task,
             task_id,
             request.goal,
             request.url,
             request.max_steps,
+            request.width,
+            request.height,
             disable_vision
         )
     )
+    active_tasks[task_id] = async_task
 
     return StartAgentResponse(
         task_id=task_id,
-        status="queued",
+        status="started",
         message=f"Agent task {task_id} started successfully."
     )
 
@@ -156,12 +164,24 @@ async def get_task_status(task_id: str):
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found.")
     return task_store[task_id]
 
+@app.post("/api/agent/stop/{task_id}")
+async def stop_agent(task_id: str):
+    if task_id not in task_store:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found.")
+
+    if task_id in active_tasks:
+        async_task = active_tasks[task_id]
+        async_task.cancel()
+        del active_tasks[task_id]
+
+    task_store[task_id]["status"] = "cancelled"
+    return {"task_id": task_id, "status": "cancelled", "message": "Agent task cancelled gracefully."}
+
 @app.websocket("/ws/telemetry")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # Keep connection open and listen for ping/messages
             data = await websocket.receive_text()
             logger.debug(f"Received WebSocket message from client: {data}")
     except WebSocketDisconnect:
@@ -178,7 +198,7 @@ if dashboard_dir.exists():
 @app.get("/")
 async def root():
     return {
-        "service": "Browser Agent Telemetry & Control Server",
+        "service": "Visual Browser Agent Telemetry & Control Server",
         "dashboard": "/dashboard/",
         "websocket": "ws://localhost:8000/ws/telemetry",
         "docs": "/docs"

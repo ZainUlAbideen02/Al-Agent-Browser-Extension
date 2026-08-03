@@ -6,19 +6,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const agentForm = document.getElementById("agentForm");
     const targetUrlInput = document.getElementById("targetUrl");
     const goalInput = document.getElementById("goal");
-    const modeSelect = document.getElementById("mode");
+    const resolutionSelect = document.getElementById("resolution");
     const maxStepsInput = document.getElementById("maxSteps");
     const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
 
     const taskIdVal = document.getElementById("taskIdVal");
     const taskStateBadge = document.getElementById("taskStateBadge");
     const stepsVal = document.getElementById("stepsVal");
-    const visionCountVal = document.getElementById("visionCountVal");
+    const coordsVal = document.getElementById("coordsVal");
 
+    const previewContainer = document.getElementById("previewContainer");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
     const livePreviewImg = document.getElementById("livePreviewImg");
     const previewPageUrl = document.getElementById("previewPageUrl");
-    const visionModeBadge = document.getElementById("visionModeBadge");
+    const targetOverlayMarker = document.getElementById("targetOverlayMarker");
+    const markerLabel = document.getElementById("markerLabel");
 
     const logFeed = document.getElementById("logFeed");
     const clearLogsBtn = document.getElementById("clearLogsBtn");
@@ -26,7 +29,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let ws = null;
     let currentTaskId = null;
     let stepCounter = 0;
-    let visionFallbackCounter = 0;
+    let activeWidth = 1280;
+    let activeHeight = 800;
 
     // Connect to WebSocket Server
     function connectWebSocket() {
@@ -39,13 +43,12 @@ document.addEventListener("DOMContentLoaded", () => {
         ws.onopen = () => {
             statusDot.className = "status-dot connected";
             statusText.textContent = "Connected";
-            console.log("WebSocket connected to telemetry server.");
+            console.log("WebSocket connected to visual telemetry server.");
         };
 
         ws.onclose = () => {
             statusDot.className = "status-dot disconnected";
             statusText.textContent = "Disconnected";
-            console.log("WebSocket disconnected. Retrying in 3s...");
             setTimeout(connectWebSocket, 3000);
         };
 
@@ -69,15 +72,22 @@ document.addEventListener("DOMContentLoaded", () => {
     agentForm.addEventListener("submit", async (e) => {
         e.preventDefault();
 
+        const resParts = resolutionSelect.value.split("x");
+        activeWidth = parseInt(resParts[0], 10);
+        activeHeight = parseInt(resParts[1], 10);
+
         const payload = {
             url: targetUrlInput.value.trim(),
             goal: goalInput.value.trim(),
-            mode: modeSelect.value,
-            max_steps: parseInt(maxStepsInput.value, 10)
+            max_steps: parseInt(maxStepsInput.value, 10),
+            width: activeWidth,
+            height: activeHeight,
+            mode: "hybrid"
         };
 
         startBtn.disabled = true;
-        startBtn.innerHTML = "<span>⏳ Launching Agent...</span>";
+        stopBtn.disabled = false;
+        startBtn.innerHTML = "<span>⏳ Running...</span>";
 
         try {
             const apiHost = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
@@ -94,21 +104,38 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             currentTaskId = data.task_id;
             stepCounter = 0;
-            visionFallbackCounter = 0;
 
             taskIdVal.textContent = currentTaskId;
             taskStateBadge.className = "badge badge-info";
             taskStateBadge.textContent = "Running";
             stepsVal.textContent = `0 / ${payload.max_steps}`;
-            visionCountVal.textContent = "0";
+            coordsVal.textContent = "None";
 
             logFeed.innerHTML = "";
 
         } catch (err) {
-            alert(`Error starting agent: ${err.message}`);
+            alert(`Error launching agent: ${err.message}`);
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            startBtn.innerHTML = "<span>▶ Launch Task</span>";
+        }
+    });
+
+    // Stop task handler
+    stopBtn.addEventListener("click", async () => {
+        if (!currentTaskId) return;
+
+        try {
+            const apiHost = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
+            await fetch(`${apiHost}/api/agent/stop/${currentTaskId}`, { method: "POST" });
+            taskStateBadge.className = "badge badge-warning";
+            taskStateBadge.textContent = "Cancelled";
+        } catch (err) {
+            console.error("Error stopping task:", err);
         } finally {
             startBtn.disabled = false;
-            startBtn.innerHTML = "<span>▶ Start Autonomous Agent</span>";
+            stopBtn.disabled = true;
+            startBtn.innerHTML = "<span>▶ Launch Task</span>";
         }
     });
 
@@ -117,20 +144,40 @@ document.addEventListener("DOMContentLoaded", () => {
         logFeed.innerHTML = '<div class="empty-feed-msg">No step telemetry events recorded yet.</div>';
     });
 
+    // Position Coordinate Overlay Marker on Screenshot
+    function updateCoordinateOverlay(x, y) {
+        if (x === null || x === undefined || y === null || y === undefined) {
+            targetOverlayMarker.style.display = "none";
+            return;
+        }
+
+        coordsVal.textContent = `(${x}, ${y})`;
+        markerLabel.textContent = `(${x}, ${y})`;
+
+        // Calculate scaled position relative to rendered screenshot image element
+        const imgRect = livePreviewImg.getBoundingClientRect();
+        const containerRect = previewContainer.getBoundingClientRect();
+
+        const scaleX = imgRect.width / activeWidth;
+        const scaleY = imgRect.height / activeHeight;
+
+        const imgLeftRelativeToContainer = imgRect.left - containerRect.left;
+        const imgTopRelativeToContainer = imgRect.top - containerRect.top;
+
+        const posX = imgLeftRelativeToContainer + (x * scaleX);
+        const posY = imgTopRelativeToContainer + (y * scaleY);
+
+        targetOverlayMarker.style.left = `${posX}px`;
+        targetOverlayMarker.style.top = `${posY}px`;
+        targetOverlayMarker.style.display = "block";
+    }
+
     // Telemetry frame handler
     function handleTelemetryFrame(frame) {
         if (!frame) return;
 
         stepCounter = frame.step_num || (stepCounter + 1);
-        if (frame.used_vision) {
-            visionFallbackCounter++;
-            visionModeBadge.style.display = "inline-block";
-        } else {
-            visionModeBadge.style.display = "none";
-        }
-
         stepsVal.textContent = `${stepCounter} Steps`;
-        visionCountVal.textContent = visionFallbackCounter;
 
         if (frame.page_url) {
             previewPageUrl.textContent = `URL: ${frame.page_url}`;
@@ -140,6 +187,10 @@ document.addEventListener("DOMContentLoaded", () => {
             previewPlaceholder.style.display = "none";
             livePreviewImg.style.display = "block";
             livePreviewImg.src = frame.screenshot_base64;
+            // Update marker overlay position after image loads
+            setTimeout(() => {
+                updateCoordinateOverlay(frame.x, frame.y);
+            }, 100);
         }
 
         // Remove empty feed message
@@ -152,18 +203,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const card = document.createElement("div");
         card.className = "log-card";
 
-        const badgeClass = frame.used_vision ? "badge-vision" : "badge-info";
-        const badgeText = frame.used_vision ? "👁️ Vision Fallback" : "🧠 Pure DOM";
-
         const coordsStr = (frame.x !== null && frame.x !== undefined) ? ` (${frame.x}, ${frame.y})` : "";
         const selectorStr = frame.selector ? ` | Locator: ${frame.selector}` : "";
 
         card.innerHTML = `
             <div class="log-card-header">
                 <span class="log-step-title">STEP ${frame.step_num}: ${frame.action.toUpperCase()}${coordsStr}</span>
-                <span class="badge ${badgeClass}">${badgeText}</span>
+                <span class="badge badge-vision">👁️ Visual Agent</span>
             </div>
-            <div class="log-reasoning">💡 ${frame.reasoning || "Executing step action..."}</div>
+            <div class="log-reasoning">💡 ${frame.thought || frame.reasoning || "Executing physical visual action..."}</div>
             <div class="log-meta-row">
                 <span>Status: ${frame.success ? "✅ Success" : "❌ Failed"}</span>
                 <span>${selectorStr}</span>
@@ -175,6 +223,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (frame.action === "done") {
             taskStateBadge.className = "badge badge-success";
             taskStateBadge.textContent = "Completed";
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            startBtn.innerHTML = "<span>▶ Launch Task</span>";
         }
     }
 });

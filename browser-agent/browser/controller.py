@@ -154,10 +154,19 @@ class BrowserController:
             return locator
         except PlaywrightTimeoutError:
             if ":has-text(" in selector:
-                clean_text = selector.split(':has-text("')[1].rstrip('")')
-                alt_locator = self.page.get_by_text(clean_text, exact=False).first
-                alt_locator.wait_for(state="visible", timeout=timeout_ms // 2)
-                return alt_locator
+                try:
+                    clean_text = None
+                    if ':has-text("' in selector:
+                        clean_text = selector.split(':has-text("')[1].rstrip('")')
+                    elif ":has-text('" in selector:
+                        clean_text = selector.split(":has-text('")[1].rstrip("')")
+
+                    if clean_text:
+                        alt_locator = self.page.get_by_text(clean_text, exact=False).first
+                        alt_locator.wait_for(state="visible", timeout=timeout_ms // 2)
+                        return alt_locator
+                except Exception:
+                    pass
             raise
 
     def click(self, selector: str, timeout: Optional[int] = None) -> None:
@@ -167,14 +176,15 @@ class BrowserController:
         locator = self._resolve_locator(selector, timeout_ms)
         locator.click(timeout=timeout_ms)
 
-    def type_text(self, selector: str, text: str, timeout: Optional[int] = None) -> None:
-        """Focus an element, type text, and press Enter."""
+    def type_text(self, selector: str, text: str, timeout: Optional[int] = None, press_enter: bool = False) -> None:
+        """Focus an element and fill text."""
         timeout_ms = timeout or self.default_timeout_ms
         logger.info(f"Typing '{text}' into selector: '{selector}'")
         locator = self._resolve_locator(selector, timeout_ms)
         locator.click(timeout=timeout_ms // 2)
         locator.fill(text)
-        self.page.keyboard.press("Enter")
+        if press_enter:
+            self.page.keyboard.press("Enter")
 
     def select_option(self, selector: str, value: str, timeout: Optional[int] = None) -> None:
         """Select an option in a native <select> dropdown by label or value."""

@@ -1,12 +1,13 @@
+import math
 import logging
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("browser_agent.agent.memory")
 
 class StepMemory:
-    """Tracks step history and guards against endless execution loops."""
+    """Tracks step execution metrics, formats LLM prompt history, and detects visual spatial repetition loops."""
 
-    def __init__(self, max_history: int = 10):
+    def __init__(self, max_history: int = 20):
         self.max_history = max_history
         self.history: List[Dict[str, Any]] = []
         self.consecutive_failures: int = 0
@@ -21,7 +22,7 @@ class StepMemory:
         page_state: Dict[str, Any],
         used_vision_fallback: bool = False
     ) -> None:
-        """Record step entry in history with vision usage tracking."""
+        """Record step entry with spatial metrics and page metadata."""
         if used_vision_fallback:
             self.vision_fallback_count += 1
 
@@ -30,71 +31,127 @@ class StepMemory:
         else:
             self.consecutive_failures = 0
 
+        action_type = action_taken.get("action", "")
+        selector = action_taken.get("selector")
+        x = action_taken.get("x")
+        y = action_taken.get("y")
+        text = action_taken.get("text") or action_taken.get("value")
+        reasoning = action_taken.get("thought") or action_taken.get("reasoning", "")
+        url = page_state.get("url") or page_state.get("current_url", "")
+        title = page_state.get("title") or page_state.get("page_title", "")
+
         entry = {
             "step_num": step_num,
             "action_taken": action_taken,
+            "action_type": action_type,
+            "selector": selector,
+            "x": x,
+            "y": y,
+            "text": text,
+            "reasoning": reasoning,
             "result": result,
             "screenshot_path": screenshot_path,
             "used_vision_fallback": used_vision_fallback,
-            "page_url": page_state.get("url", ""),
-            "page_title": page_state.get("title", "")
+            "page_url": url,
+            "page_title": title
         }
         self.history.append(entry)
-        logger.info(f"Recorded Step {step_num}: Action={action_taken.get('action')} | Success={result.get('success')} | VisionFallback={used_vision_fallback}")
+        logger.info(f"Recorded Step {step_num}: Action={action_type} | Selector={selector} | Coords=({x}, {y}) | Success={result.get('success')}")
 
     def should_trigger_vision_fallback(self) -> bool:
         """Trigger vision fallback if action execution failed 2 consecutive times."""
         return self.consecutive_failures >= 2
 
-    def is_looping(self, window: int = 3) -> bool:
+    def is_visually_stuck(self, threshold: int = 3, radius: float = 10.0) -> bool:
         """
-        Detects if the agent is stuck performing duplicate actions on static URL/Title.
-        Ignores 'wait' actions unless 5 or more consecutive identical wait actions occur.
+        Detects if the agent is performing repetitive visual actions at near-identical coordinates 
+        within radius pixels on the same page URL.
+        Excludes legitimate 'wait' and 'scroll' actions.
         """
-        if len(self.history) < window:
+        if len(self.history) < threshold:
             return False
 
-        recent = self.history[-window:]
-        actions = [s["action_taken"].get("action") for s in recent]
-        selectors = [s["action_taken"].get("action_type", s["action_taken"].get("selector")) for s in recent]
+        recent = self.history[-threshold:]
+        actions = [s.get("action_type") for s in recent]
+
+        if any(act in ("wait", "scroll") for act in actions):
+            return False
+
         urls = [s.get("page_url") for s in recent]
-        titles = [s.get("page_title") for s in recent]
+        if len(set(urls)) > 1:
+            return False
 
-        # Ignore wait actions unless at least 5 consecutive waits occur
-        if all(act == "wait" for act in actions):
-            if len(self.history) < 5:
+        if len(set(actions)) != 1:
+            return False
+
+        coords = [(s.get("x"), s.get("y")) for s in recent]
+        if any(c[0] is None or c[1] is None for c in coords):
+            return False
+
+        base_x, base_y = coords[0]
+        for cx, cy in coords[1:]:
+            dist = math.hypot(cx - base_x, cy - base_y)
+            if dist > radius:
                 return False
-            five_recent = [s["action_taken"].get("action") for s in self.history[-5:]]
-            return all(act == "wait" for act in five_recent)
 
-        # Check if same action & selector executed repeatedly with static URL and Title
-        same_action = len(set(actions)) == 1
-        same_selector = len(set(selectors)) == 1
-        same_url = len(set(urls)) == 1
-        same_title = len(set(titles)) == 1
+        logger.warning(
+            f"Visual Loop Detected: Action '{actions[0]}' at ({base_x}, {base_y}) repeated {threshold} times "
+            f"within {radius}px radius on {urls[0]}."
+        )
+        return True
 
-        if same_action and same_selector and same_url and same_title:
-            logger.warning(
-                f"Loop Guard Triggered: Action {actions[0]} on '{selectors[0]}' repeated {window} times "
-                f"with zero page progress (URL: {urls[0]}). Agent is stuck."
+    def get_recovery_warning(self, threshold: int = 3, radius: float = 10.0) -> Optional[str]:
+        """Returns recovery warning prompt context string if visual loop is detected."""
+        if self.is_visually_stuck(threshold=threshold, radius=radius):
+            last_step = self.history[-1]
+            act = last_step.get("action_type", "click")
+            x = last_step.get("x", 0)
+            y = last_step.get("y", 0)
+            return (
+                f"RECOVERY WARNING: Action '{act}' at ({x}, {y}) repeated {threshold} times with no visual page change. "
+                f"Try scrolling, pressing Enter/Tab, or clicking a different visual element."
             )
-            return True
+        return None
 
-        return False
-
-    def get_summary(self, max_recent: int = 5) -> str:
-        """Returns string summary of last N steps for prompt context."""
+    def get_formatted_history(self, limit: int = 5) -> str:
+        """Formats the last `limit` steps into a concise string context for the LLM prompt."""
         if not self.history:
             return "No previous steps taken."
 
-        recent_steps = self.history[-max_recent:]
+        recent_steps = self.history[-limit:]
         formatted = []
         for s in recent_steps:
-            act = s["action_taken"]
-            res = s["result"]
+            act = s.get("action_type", "")
+            sel = s.get("selector")
+            x = s.get("x")
+            y = s.get("y")
+            txt = s.get("text")
+
+            details = []
+            if sel:
+                details.append(f"Selector='{sel}'")
+            if x is not None and y is not None:
+                details.append(f"Coords=({x}, {y})")
+            if txt:
+                details.append(f"Value='{txt}'")
+
+            details_str = f" ({', '.join(details)})" if details else ""
+            res = s.get("result", {})
             status = "SUCCESS" if res.get("success") else f"FAILED ({res.get('message')})"
-            vis_tag = " [Vision Fallback Used]" if s.get("used_vision_fallback") else ""
-            line = f"Step {s['step_num']}: Action='{act.get('action')}' (Selector='{act.get('selector')}', Text='{act.get('text')}') -> Status: {status}{vis_tag}"
+            vis_tag = " [Vision Used]" if s.get("used_vision_fallback") else ""
+            line = f"Step {s['step_num']}: Action='{act}'{details_str} -> Status: {status}{vis_tag}"
             formatted.append(line)
 
+        warning = self.get_recovery_warning()
+        if warning:
+            formatted.append(f"\n⚠️ {warning}")
+
         return "\n".join(formatted)
+
+    def is_looping(self, window: int = 3) -> bool:
+        """Legacy helper alias matching is_visually_stuck."""
+        return self.is_visually_stuck(threshold=window)
+
+    def get_summary(self, max_recent: int = 5) -> str:
+        """Legacy helper matching get_formatted_history."""
+        return self.get_formatted_history(limit=max_recent)
