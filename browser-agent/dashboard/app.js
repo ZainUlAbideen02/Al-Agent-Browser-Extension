@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
 
+    const templateSelect = document.getElementById("templateSelect");
     const agentForm = document.getElementById("agentForm");
     const targetUrlInput = document.getElementById("targetUrl");
     const goalInput = document.getElementById("goal");
@@ -11,10 +12,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
 
+    const activeModelPill = document.getElementById("activeModelPill");
+    const latencyVal = document.getElementById("latencyVal");
+    const metricCoordsVal = document.getElementById("metricCoordsVal");
+    const successRateVal = document.getElementById("successRateVal");
+    const streamFpsVal = document.getElementById("streamFpsVal");
+
     const taskIdVal = document.getElementById("taskIdVal");
     const taskStateBadge = document.getElementById("taskStateBadge");
     const stepsVal = document.getElementById("stepsVal");
-    const coordsVal = document.getElementById("coordsVal");
 
     const previewContainer = document.getElementById("previewContainer");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
@@ -31,6 +37,28 @@ document.addEventListener("DOMContentLoaded", () => {
     let stepCounter = 0;
     let activeWidth = 1280;
     let activeHeight = 800;
+
+    let successfulSteps = 0;
+    let totalStepsRecorded = 0;
+    let lastStepTimestamp = null;
+
+    let frameCount = 0;
+    let lastFpsReset = Date.now();
+
+    // Template Selector presets
+    templateSelect.addEventListener("change", () => {
+        const val = templateSelect.value;
+        if (val === "login") {
+            targetUrlInput.value = "https://the-internet.herokuapp.com/login";
+            goalInput.value = "Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button";
+        } else if (val === "canvas") {
+            targetUrlInput.value = "file:///c:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html";
+            goalInput.value = "Click the canvas button visually labeled 'CLICK ME TO WIN - TARGET'";
+        } else if (val === "books") {
+            targetUrlInput.value = "https://books.toscrape.com";
+            goalInput.value = "Navigate to Travel category and select the first book";
+        }
+    });
 
     // Connect to WebSocket Server
     function connectWebSocket() {
@@ -68,6 +96,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     connectWebSocket();
 
+    // Stream FPS Counter Loop
+    setInterval(() => {
+        const now = Date.now();
+        const elapsedSec = (now - lastFpsReset) / 1000.0;
+        const fps = Math.round(frameCount / elapsedSec);
+        streamFpsVal.textContent = `${fps} FPS`;
+        frameCount = 0;
+        lastFpsReset = now;
+    }, 1000);
+
     // Form submission handler
     agentForm.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -89,6 +127,10 @@ document.addEventListener("DOMContentLoaded", () => {
         stopBtn.disabled = false;
         startBtn.innerHTML = "<span>⏳ Running...</span>";
 
+        successfulSteps = 0;
+        totalStepsRecorded = 0;
+        lastStepTimestamp = Date.now();
+
         try {
             const apiHost = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
             const response = await fetch(`${apiHost}/api/agent/start`, {
@@ -109,7 +151,10 @@ document.addEventListener("DOMContentLoaded", () => {
             taskStateBadge.className = "badge badge-info";
             taskStateBadge.textContent = "Running";
             stepsVal.textContent = `0 / ${payload.max_steps}`;
-            coordsVal.textContent = "None";
+
+            metricCoordsVal.textContent = "(0, 0)";
+            latencyVal.textContent = "0.0s";
+            successRateVal.textContent = "100%";
 
             logFeed.innerHTML = "";
 
@@ -144,17 +189,17 @@ document.addEventListener("DOMContentLoaded", () => {
         logFeed.innerHTML = '<div class="empty-feed-msg">No step telemetry events recorded yet.</div>';
     });
 
-    // Position Coordinate Overlay Marker on Screenshot
+    // Position Crosshair Target Overlay on Screenshot
     function updateCoordinateOverlay(x, y) {
         if (x === null || x === undefined || y === null || y === undefined) {
             targetOverlayMarker.style.display = "none";
+            metricCoordsVal.textContent = "None";
             return;
         }
 
-        coordsVal.textContent = `(${x}, ${y})`;
+        metricCoordsVal.textContent = `(${x}, ${y})`;
         markerLabel.textContent = `(${x}, ${y})`;
 
-        // Calculate scaled position relative to rendered screenshot image element
         const imgRect = livePreviewImg.getBoundingClientRect();
         const containerRect = previewContainer.getBoundingClientRect();
 
@@ -176,30 +221,48 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleTelemetryFrame(frame) {
         if (!frame) return;
 
+        frameCount++;
+        const now = Date.now();
+        if (lastStepTimestamp) {
+            const deltaSec = ((now - lastStepTimestamp) / 1000.0).toFixed(1);
+            latencyVal.textContent = `${deltaSec}s`;
+        }
+        lastStepTimestamp = now;
+
         stepCounter = frame.step_num || (stepCounter + 1);
         stepsVal.textContent = `${stepCounter} Steps`;
 
+        totalStepsRecorded++;
+        if (frame.success !== false) {
+            successfulSteps++;
+        }
+        const ratePct = Math.round((successfulSteps / totalStepsRecorded) * 100);
+        successRateVal.textContent = `${ratePct}%`;
+
         if (frame.page_url) {
             previewPageUrl.textContent = `URL: ${frame.page_url}`;
+        }
+
+        if (frame.used_vision) {
+            activeModelPill.textContent = "qwen3.6-27b";
+        } else {
+            activeModelPill.textContent = "llama-3.1-8b";
         }
 
         if (frame.screenshot_base64) {
             previewPlaceholder.style.display = "none";
             livePreviewImg.style.display = "block";
             livePreviewImg.src = frame.screenshot_base64;
-            // Update marker overlay position after image loads
             setTimeout(() => {
                 updateCoordinateOverlay(frame.x, frame.y);
-            }, 100);
+            }, 80);
         }
 
-        // Remove empty feed message
         const emptyMsg = logFeed.querySelector(".empty-feed-msg");
         if (emptyMsg) {
             emptyMsg.remove();
         }
 
-        // Render Log Card
         const card = document.createElement("div");
         card.className = "log-card";
 
@@ -209,11 +272,11 @@ document.addEventListener("DOMContentLoaded", () => {
         card.innerHTML = `
             <div class="log-card-header">
                 <span class="log-step-title">STEP ${frame.step_num}: ${frame.action.toUpperCase()}${coordsStr}</span>
-                <span class="badge badge-vision">👁️ Visual Agent</span>
+                <span class="badge badge-vision">👁️ Pure Visual</span>
             </div>
             <div class="log-reasoning">💡 ${frame.thought || frame.reasoning || "Executing physical visual action..."}</div>
             <div class="log-meta-row">
-                <span>Status: ${frame.success ? "✅ Success" : "❌ Failed"}</span>
+                <span>Status: ${frame.success !== false ? "✅ Success" : "❌ Failed"}</span>
                 <span>${selectorStr}</span>
             </div>
         `;

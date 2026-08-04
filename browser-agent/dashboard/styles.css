@@ -1,7 +1,7 @@
 :root {
-    --bg-color: #0f172a;
-    --panel-bg: #1e293b;
-    --panel-border: #334155;
+    --bg-color: #0b0f19;
+    --panel-bg: #131b2e;
+    --panel-border: #1e293b;
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --primary-color: #3b82f6;
@@ -10,7 +10,8 @@
     --success-color: #10b981;
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
-    --code-bg: #090d16;
+    --code-bg: #070a12;
+    --glass-bg: rgba(19, 27, 46, 0.7);
 }
 
 * {
@@ -36,58 +37,132 @@ body {
     gap: 16px;
 }
 
-/* Header */
+/* Header Bar */
 .app-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: var(--panel-bg);
     border: 1px solid var(--panel-border);
-    padding: 16px 24px;
+    padding: 14px 20px;
     border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4);
 }
 
 .logo-container {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
-.agent-icon {
-    font-size: 2rem;
+.logo-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
 }
 
 .app-header h1 {
-    font-size: 1.25rem;
-    font-weight: 700;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
 }
 
 .subtitle {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.telemetry-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+}
+
+.pill-label { color: var(--text-secondary); }
+.pill-value { font-family: 'Fira Code', monospace; color: #c084fc; font-weight: 600; }
 
 .ws-status {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 0.8rem;
+    font-weight: 600;
     padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
     border-radius: 20px;
     border: 1px solid var(--panel-border);
 }
 
 .status-dot {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
 }
 
 .status-dot.connected { background-color: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
 .status-dot.disconnected { background-color: var(--danger-color); }
+
+/* Metrics Row */
+.metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.metric-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    padding: 12px 16px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.metric-icon {
+    font-size: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.metric-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.metric-title {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.metric-value {
+    font-family: 'Fira Code', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
 
 /* Main Grid Layout */
 .main-grid {
@@ -102,17 +177,17 @@ body {
     background: var(--panel-bg);
     border: 1px solid var(--panel-border);
     border-radius: 12px;
-    padding: 20px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    gap: 14px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     overflow: hidden;
 }
 
 .panel h2 {
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-weight: 700;
 }
 
 .panel-header {
@@ -121,17 +196,17 @@ body {
     align-items: center;
 }
 
-/* Form Styles */
+/* Form Controls */
 .form-group {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .form-group label {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.75rem;
+    font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -139,13 +214,13 @@ body {
 
 input, textarea, select {
     width: 100%;
-    padding: 10px 12px;
+    padding: 9px 12px;
     background: var(--code-bg);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     outline: none;
     transition: border-color 0.2s;
 }
@@ -157,66 +232,46 @@ input:focus, textarea:focus, select:focus {
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
 }
 
 .btn-group {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    margin-top: 4px;
 }
 
 .btn {
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-radius: 8px;
     border: none;
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 0.85rem;
     cursor: pointer;
     transition: background-color 0.2s, transform 0.1s;
 }
 
-.btn-primary {
-    background-color: var(--primary-color);
-    color: white;
-}
+.btn-primary { background-color: var(--primary-color); color: white; }
+.btn-primary:hover { background-color: var(--primary-hover); }
+.btn-danger { background-color: var(--danger-color); color: white; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background-color: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
+.btn-sm { padding: 5px 10px; font-size: 0.75rem; }
 
-.btn-primary:hover {
-    background-color: var(--primary-hover);
-}
-
-.btn-danger {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-.btn-danger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.btn-secondary {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-}
-
-.btn-sm {
-    padding: 6px 12px;
-    font-size: 0.8rem;
-}
-
-/* Task Stats Card */
+/* Active Task Stats Card */
 .task-stats-card {
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(7, 10, 18, 0.6);
     border: 1px solid var(--panel-border);
-    padding: 16px;
+    padding: 14px;
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .task-stats-card h3 {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
     text-transform: uppercase;
 }
@@ -225,26 +280,27 @@ input:focus, textarea:focus, select:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }
 
 .stat-value {
     font-family: 'Fira Code', monospace;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .badge {
-    padding: 4px 8px;
+    padding: 3px 8px;
     border-radius: 4px;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .badge-info { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .badge-vision { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid #8b5cf6; }
 
-/* Visual Preview & Coordinate Marker Overlay */
+/* Live Preview & Target Cursor Crosshair Overlay */
 .preview-container {
     flex: 1;
     background: var(--code-bg);
@@ -259,7 +315,7 @@ input:focus, textarea:focus, select:focus {
 
 .preview-placeholder {
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .preview-img {
@@ -269,31 +325,56 @@ input:focus, textarea:focus, select:focus {
     display: block;
 }
 
-/* Coordinate Cursor Overlay Marker */
+/* Crosshair Target Cursor Overlay */
 .target-marker {
     position: absolute;
-    width: 24px;
-    height: 24px;
-    margin-left: -12px;
-    margin-top: -12px;
-    border-radius: 50%;
-    border: 2px solid #ef4444;
-    background: rgba(239, 68, 68, 0.3);
+    width: 32px;
+    height: 32px;
+    margin-left: -16px;
+    margin-top: -16px;
     pointer-events: none;
     z-index: 10;
 }
 
-.marker-pulse {
+.crosshair-h {
+    position: absolute;
+    top: 50%;
+    left: 0;
     width: 100%;
+    height: 2px;
+    background: #ef4444;
+    transform: translateY(-50%);
+    box-shadow: 0 0 4px #ef4444;
+}
+
+.crosshair-v {
+    position: absolute;
+    left: 50%;
+    top: 0;
     height: 100%;
+    width: 2px;
+    background: #ef4444;
+    transform: translateX(-50%);
+    box-shadow: 0 0 4px #ef4444;
+}
+
+.marker-pulse {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin-left: -8px;
+    margin-top: -8px;
     border-radius: 50%;
-    background: rgba(239, 68, 68, 0.6);
-    animation: pulse 1.5s infinite;
+    border: 2px solid #ef4444;
+    background: rgba(239, 68, 68, 0.4);
+    animation: targetPulse 1.5s infinite;
 }
 
 .marker-label {
     position: absolute;
-    top: 26px;
+    top: 34px;
     left: 50%;
     transform: translateX(-50%);
     background: #000;
@@ -307,13 +388,13 @@ input:focus, textarea:focus, select:focus {
     white-space: nowrap;
 }
 
-@keyframes pulse {
+@keyframes targetPulse {
     0% { transform: scale(1); opacity: 1; }
     100% { transform: scale(2.5); opacity: 0; }
 }
 
 .preview-meta {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
     font-family: 'Fira Code', monospace;
     word-break: break-all;
@@ -325,7 +406,7 @@ input:focus, textarea:focus, select:focus {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     padding-right: 4px;
 }
 
@@ -340,10 +421,10 @@ input:focus, textarea:focus, select:focus {
     background: var(--code-bg);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
-    padding: 12px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .log-card-header {
@@ -353,13 +434,13 @@ input:focus, textarea:focus, select:focus {
 }
 
 .log-step-title {
-    font-weight: 600;
-    font-size: 0.85rem;
+    font-weight: 700;
+    font-size: 0.8rem;
     font-family: 'Fira Code', monospace;
 }
 
 .log-reasoning {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-primary);
     line-height: 1.4;
 }
@@ -373,8 +454,6 @@ input:focus, textarea:focus, select:focus {
 }
 
 @media (max-width: 1024px) {
-    .main-grid {
-        grid-template-columns: 1fr;
-        overflow-y: auto;
-    }
+    .metrics-row { grid-template-columns: repeat(2, 1fr); }
+    .main-grid { grid-template-columns: 1fr; overflow-y: auto; }
 }
