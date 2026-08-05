@@ -30,6 +30,9 @@ class TestPhase2Intelligence(unittest.TestCase):
                 page_state=page_state
             )
 
+        self.assertTrue(self.memory.is_spatial_loop_detected(threshold=3))
+        self.assertTrue(self.memory.should_trigger_zoom_retry())
+        self.memory.zoom_retry_attempts = 2
         self.assertTrue(self.memory.is_visually_stuck(threshold=3))
         self.assertIsNotNone(self.memory.get_recovery_warning())
         self.assertIn("RECOVERY WARNING", self.memory.get_summary())

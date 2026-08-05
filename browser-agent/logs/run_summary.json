@@ -1,66 +1,9 @@
 {
-  "task_id": "7a322924-4333-4180-b1b5-8cc29ef6c29d",
-  "goal": "Test goal launch",
+  "task_id": "47d00d79-17bb-41cc-8f78-dbdc21dfbb21",
+  "goal": "Test goal cancellation",
   "start_url": "https://the-internet.herokuapp.com/login",
-  "mode": "dom",
-  "final_status": "Reached maximum steps limit (2).",
-  "total_steps": 2,
-  "history": [
-    {
-      "step_num": 1,
-      "action_taken": {
-        "action": "type",
-        "selector": "#username",
-        "x": null,
-        "y": null,
-        "text": "tomsmith",
-        "value": null,
-        "reasoning": "Enter username to proceed with login"
-      },
-      "action_type": "type",
-      "selector": "#username",
-      "x": null,
-      "y": null,
-      "text": "tomsmith",
-      "reasoning": "Enter username to proceed with login",
-      "result": {
-        "success": true,
-        "message": "Typed 'tomsmith' into selector '#username'",
-        "low_confidence_prediction": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_1.png",
-      "used_vision_fallback": false,
-      "low_confidence_prediction": false,
-      "page_url": "https://the-internet.herokuapp.com/login",
-      "page_title": "The Internet"
-    },
-    {
-      "step_num": 2,
-      "action_taken": {
-        "action": "type",
-        "selector": "#password",
-        "x": null,
-        "y": null,
-        "text": "******",
-        "value": null,
-        "reasoning": "Enter password to proceed with login"
-      },
-      "action_type": "type",
-      "selector": "#password",
-      "x": null,
-      "y": null,
-      "text": "******",
-      "reasoning": "Enter password to proceed with login",
-      "result": {
-        "success": true,
-        "message": "Typed '******' into selector '#password'",
-        "low_confidence_prediction": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_2.png",
-      "used_vision_fallback": false,
-      "low_confidence_prediction": false,
-      "page_url": "https://the-internet.herokuapp.com/login",
-      "page_title": "The Internet"
-    }
-  ]
+  "mode": "visual",
+  "final_status": "Failed with exception: Failed to obtain valid response from Groq API after 4 attempts. Last error: Expecting value: line 1 column 1 (char 0)",
+  "total_steps": 0,
+  "history": []
 }
