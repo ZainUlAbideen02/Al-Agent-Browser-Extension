@@ -1,5 +1,6 @@
 import time
 import logging
+from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 from browser.controller import BrowserController
@@ -35,7 +36,7 @@ def execute_visual_action(
 ) -> Tuple[bool, str, bool]:
     """
     Translates pure visual AI coordinate decisions into direct Playwright mouse and keyboard hardware commands.
-    No CSS selectors used in pure visual mode.
+    Supports: click, type, select, key, scroll, download, ask_human, done.
     Returns tuple: (success_bool, message_str, low_confidence_prediction_bool).
     """
     action_type = action_data.get("action")
@@ -113,6 +114,50 @@ def execute_visual_action(
             controller.scroll(dx=delta_x, dy=delta_y)
             return True, f"Scrolled {direction} by {amount}px", False
 
+        elif action_type == "select":
+            selector = action_data.get("selector")
+            value = action_data.get("value") or action_data.get("text") or ""
+            x = action_data.get("x")
+            y = action_data.get("y")
+
+            if selector:
+                controller.select_option(selector, value)
+                return True, f"Selected option '{value}' in '{selector}'", False
+            elif x is not None and y is not None:
+                cx, cy, is_low_confidence = validate_and_clamp_coordinates(x, y, viewport_w, viewport_h)
+                controller.mouse_click(cx, cy, smooth=True)
+                time.sleep(0.2)
+                if value:
+                    controller.keyboard_type(value)
+                    controller.key_press("Enter")
+                return True, f"Clicked select box at ({cx}, {cy}) and selected '{value}'", is_low_confidence
+            return False, "Select action requires a selector or pixel coordinates.", False
+
+        elif action_type == "download":
+            x = action_data.get("x")
+            y = action_data.get("y")
+            selector = action_data.get("selector")
+            downloads_dir = Path("downloads")
+            downloads_dir.mkdir(exist_ok=True)
+
+            with controller.page.expect_download(timeout=15000) as download_info:
+                if x is not None and y is not None:
+                    cx, cy, is_low_confidence = validate_and_clamp_coordinates(x, y, viewport_w, viewport_h)
+                    controller.mouse_click(cx, cy, smooth=True)
+                elif selector:
+                    controller.click(selector)
+                else:
+                    return False, "Download action requires coordinates or a selector.", False
+
+            download = download_info.value
+            download_path = downloads_dir / download.suggested_filename
+            download.save_as(download_path)
+            return True, f"File downloaded successfully to {download_path}", is_low_confidence
+
+        elif action_type == "ask_human":
+            prompt_msg = action_data.get("prompt") or action_data.get("reasoning") or "Agent requested human assistance."
+            return True, f"Agent requested human assistance: {prompt_msg}", False
+
         elif action_type == "drag_and_drop":
             start_x = action_data.get("start_x", 0)
             start_y = action_data.get("start_y", 0)
@@ -129,14 +174,6 @@ def execute_visual_action(
             controller.page.mouse.up()
             time.sleep(0.5)
             return True, f"Dragged from ({cs_x}, {cs_y}) to ({ce_x}, {ce_y})", is_low_confidence
-
-        elif action_type == "select":
-            selector = action_data.get("selector")
-            value = action_data.get("value") or action_data.get("text") or ""
-            if selector:
-                controller.select_option(selector, value)
-                return True, f"Selected option '{value}' in '{selector}'", False
-            return False, "Select action requires a selector.", False
 
         elif action_type == "wait":
             time.sleep(2.0)

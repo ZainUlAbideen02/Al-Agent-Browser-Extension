@@ -11,18 +11,20 @@ from agent.context_vault import ContextVault
 logger = logging.getLogger("browser_agent.agent.reasoner")
 
 class PureVisualActionDecision(BaseModel):
-    """Pydantic schema for Pure Visual Computer-Use Agent action decision (coordinate-only)."""
+    """Pydantic schema for Pure Visual Computer-Use Agent action decision."""
     reasoning: str = Field(
         default="Analyzing visual screenshot context.",
         description="Detailed visual analysis of the screenshot identifying target coordinates."
     )
-    action: Literal["click", "type", "key", "scroll", "done"] = Field(
+    action: Literal["click", "type", "select", "key", "scroll", "download", "ask_human", "done"] = Field(
         ...,
-        description="The physical visual action to execute: click, type, key, scroll, done."
+        description="The visual action to execute: click, type, select, key, scroll, download, ask_human, done."
     )
-    x: Optional[int] = Field(None, description="Exact center X pixel coordinate at 1280x800 resolution.")
-    y: Optional[int] = Field(None, description="Exact center Y pixel coordinate at 1280x800 resolution.")
+    x: Optional[int] = Field(None, description="Center X pixel coordinate at 1280x800 resolution.")
+    y: Optional[int] = Field(None, description="Center Y pixel coordinate at 1280x800 resolution.")
+    selector: Optional[str] = Field(None, description="CSS selector locator fallback if applicable.")
     text: Optional[str] = Field(None, description="Text string to type if action is 'type'.")
+    value: Optional[str] = Field(None, description="Option value/label to choose if action is 'select'.")
     key: Optional[str] = Field(None, description="Key name to press (e.g. 'Enter', 'Tab', 'Escape') if action is 'key'.")
     direction: Optional[Literal["up", "down", "left", "right"]] = Field(None, description="Scroll direction if action is 'scroll'.")
 
@@ -39,21 +41,37 @@ class ActionVerificationResult(BaseModel):
     success: bool = Field(..., description="True if page change indicates intended action succeeded.")
     reasoning: str = Field(..., description="Explanation of visual comparison between before and after screenshots.")
 
+class HumanRequiredDetection(BaseModel):
+    """Pydantic schema for detecting human login, CAPTCHA, 2FA, or payment intervention requirements."""
+    human_required: bool = Field(..., description="True if page requires human to log in, solve CAPTCHA, enter 2FA, or pay.")
+    requirement_type: Optional[Literal["login", "captcha", "2fa", "payment", "other"]] = Field(
+        None, description="Type of human intervention detected."
+    )
+    reasoning: str = Field(..., description="Explanation of why human intervention is required.")
+
+class GoalSelfAssessment(BaseModel):
+    """Pydantic schema for agent goal completion self-assessment."""
+    completion_status: Literal["fully_met", "partially_met", "not_met"] = Field(
+        ..., description="Self-assessment of user goal completion status."
+    )
+    accomplishment_summary: str = Field(..., description="Plain text summary of what was accomplished during the run.")
+    detailed_explanation: str = Field(..., description="Detailed explanation supporting the completion status.")
+
 class VisualActionDecision(PureVisualActionDecision):
     """Alias for backwards compatibility."""
     thought: Optional[str] = Field(None)
 
 class ActionDecision(BaseModel):
     """Schema supporting DOM perception and fallback calls."""
-    action: Literal["click", "click_coordinate", "type", "select", "scroll", "wait", "done"] = Field(
-        ...,
-        description="The action type to perform."
+    action: Literal["click", "click_coordinate", "type", "select", "key", "scroll", "download", "ask_human", "wait", "done"] = Field(
+        ..., description="The action type to perform."
     )
     selector: Optional[str] = Field(default=None)
     x: Optional[int] = Field(default=None)
     y: Optional[int] = Field(default=None)
     text: Optional[str] = Field(default=None)
     value: Optional[str] = Field(default=None)
+    key: Optional[str] = Field(default=None)
     reasoning: Optional[str] = Field(default="Executing next action step.")
 
 SYSTEM_PROMPT_PURE_VISUAL = """You are a pure visual computer-use agent controlling a web browser strictly via screenshots at 1280x800 resolution.
@@ -68,20 +86,54 @@ CRITICAL INSTRUCTIONS:
 4. FORM FILLING & ACTION RULES:
    - To fill an input field: choose action 'type', specify the field's center (x, y) pixel coordinates, and set 'text' to the value to type. Reference USER PROFILE VAULT CONTEXT for personal profile details.
    - To click a button/link: choose action 'click' and specify (x, y) coordinates.
+   - To select a dropdown option: choose action 'select', specify (x, y) coordinates of the select box, and set 'value' to the option text.
    - To press a key (e.g. 'Enter', 'Tab', 'Escape'): choose action 'key' and set 'key' to the key name.
    - To scroll: choose action 'scroll' and set 'direction' to 'down' or 'up'.
+   - To download a file: choose action 'download' and specify (x, y) coordinates of the download button/link.
+   - To ask human for help: choose action 'ask_human' if uncertain, blocked, or requiring human input.
    - To finish: choose action 'done'.
 5. Output strictly valid JSON matching the schema:
 {{
   "reasoning": "<visual analysis of target elements using grid reference numbers>",
-  "action": "click" | "type" | "key" | "scroll" | "done",
+  "action": "click" | "type" | "select" | "key" | "scroll" | "download" | "ask_human" | "done",
   "x": 640 or null,
   "y": 400 or null,
   "text": "text string if type" or null,
+  "value": "option label if select" or null,
   "key": "Enter" | "Tab" | "Escape" or null,
   "direction": "down" | "up" or null
 }}
 Do NOT output any markdown formatting or extra text outside the JSON object.
+"""
+
+SYSTEM_PROMPT_HUMAN_DETECT = """You are a visual browser security and authentication detector. Examine the page screenshot to determine if a human user is required to intervene.
+
+DETECTION CRITERIA:
+- 'login': Page requires logging into a user account (e.g. Google, Amazon, Bank, OAuth, password prompt).
+- 'captcha': Page presents a CAPTCHA challenge (reCAPTCHA, hCaptcha, Cloudflare turnstile, image puzzle).
+- '2fa': Page requires an SMS code, authenticator app OTP, or security key prompt.
+- 'payment': Page requests credit card, bank details, or checkout payment authorization.
+
+Output strictly valid JSON matching schema:
+{{
+  "human_required": true | false,
+  "requirement_type": "login" | "captcha" | "2fa" | "payment" | "other" | null,
+  "reasoning": "<brief explanation of why human action is or is not required>"
+}}
+"""
+
+SYSTEM_PROMPT_ASSESSMENT = """You are an objective AI quality auditor evaluating the execution trajectory of a browser automation agent.
+
+User Goal: "{goal}"
+
+Review the attached final screenshot and the execution history summary. Evaluate whether the agent successfully accomplished the user's objective.
+
+Output strictly valid JSON matching schema:
+{{
+  "completion_status": "fully_met" | "partially_met" | "not_met",
+  "accomplishment_summary": "<concise plain-text summary of what was accomplished>",
+  "detailed_explanation": "<detailed visual and step-by-step evidence supporting the evaluation>"
+}}
 """
 
 SYSTEM_PROMPT_ZOOMED = """You are a precision computer-use vision agent analyzing a 2x upscaled (800x800px) zoomed crop centered on a target UI region.
@@ -124,24 +176,28 @@ Available Actions:
 2. "click_coordinate": Click at specific (x, y) pixel coordinates.
 3. "type": Focus an element specified by its 'selector' and type the specified 'text'.
 4. "select": Choose an option from a native HTML <select> element.
-5. "scroll": Scroll page down or up.
-6. "wait": Pause 2 seconds.
-7. "done": Declare completion.
+5. "key": Press a hardware key ('Enter', 'Tab', 'Escape').
+6. "scroll": Scroll page down or up.
+7. "download": Trigger a file download.
+8. "ask_human": Proactively request human help if stuck.
+9. "wait": Pause 2 seconds.
+10. "done": Declare completion.
 
 Output strictly valid JSON matching this schema:
 {{
-  "action": "click" | "click_coordinate" | "type" | "select" | "scroll" | "wait" | "done",
+  "action": "click" | "click_coordinate" | "type" | "select" | "key" | "scroll" | "download" | "ask_human" | "wait" | "done",
   "selector": "<exact locator string or null>",
   "x": null,
   "y": null,
   "text": "<text to enter if action is type else null>",
   "value": "<option value/label to choose if action is select else null>",
+  "key": "<key name if key action else null>",
   "reasoning": "<short sentence explaining why>"
 }}
 """
 
 class ReasonerAgent(BaseAgent):
-    """LLM Reasoner agent supporting Pure Visual Computer-Use, Zoom-Retry Precision, Post-Click Verification, and DOM reasoning."""
+    """LLM Reasoner agent supporting Pure Visual Computer-Use, Human Handoff Detection, Self-Assessment, and DOM reasoning."""
 
     def __init__(
         self,
@@ -152,6 +208,79 @@ class ReasonerAgent(BaseAgent):
     ):
         super().__init__(api_key=api_key, text_model=text_model, vision_model=vision_model)
         self.vault = vault or ContextVault()
+
+    def detect_human_required(self, visual_state: Dict[str, Any]) -> Tuple[bool, str, str]:
+        """
+        Detects if current page requires human login, CAPTCHA, 2FA, or payment intervention.
+        Returns tuple: (human_required_bool, requirement_type_str, reasoning_str).
+        """
+        screenshot_path = visual_state.get("screenshot_path")
+        if not screenshot_path or not Path(screenshot_path).exists():
+            return False, "none", "No screenshot available for human requirement check."
+
+        user_msg = f"""Current Page URL: {visual_state.get('current_url', 'N/A')}
+Current Page Title: {visual_state.get('page_title', 'N/A')}
+
+Does this page require a human to log in, solve a CAPTCHA, enter a 2FA code, or enter payment info? Answer yes/no and which type.
+Output strictly valid JSON matching schema.
+"""
+        try:
+            raw_res = self.call_llm(
+                system_prompt=SYSTEM_PROMPT_HUMAN_DETECT,
+                user_message=user_msg,
+                expect_json=True,
+                image_path=screenshot_path
+            )
+            detection = HumanRequiredDetection(**raw_res)
+            logger.info(
+                f"Human Requirement Detection: HumanRequired={detection.human_required} | "
+                f"Type={detection.requirement_type} | Reasoning: {detection.reasoning[:60]}..."
+            )
+            return detection.human_required, detection.requirement_type or "login", detection.reasoning
+        except Exception as e:
+            logger.warning(f"Human requirement detection call failed: {e}. Assuming no human action required.")
+            return False, "none", f"Detection call error: {e}"
+
+    def assess_goal_completion(
+        self,
+        goal: str,
+        history_summary: str,
+        visual_state: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Performs self-assessment of user goal completion status (fully_met, partially_met, not_met).
+        Returns dictionary with completion_status, accomplishment_summary, and detailed_explanation.
+        """
+        screenshot_path = visual_state.get("screenshot_path")
+        system_prompt = SYSTEM_PROMPT_ASSESSMENT.format(goal=goal)
+
+        user_msg = f"""User Objective Goal: "{goal}"
+Final Page URL: {visual_state.get('current_url', 'N/A')}
+Final Page Title: {visual_state.get('page_title', 'N/A')}
+
+Full Trajectory Execution History:
+{history_summary}
+
+Analyze the final visual screenshot and step history. Output strictly valid JSON matching schema:
+{{"completion_status": "fully_met"|"partially_met"|"not_met", "accomplishment_summary": "...", "detailed_explanation": "..."}}
+"""
+        try:
+            raw_res = self.call_llm(
+                system_prompt=system_prompt,
+                user_message=user_msg,
+                expect_json=True,
+                image_path=screenshot_path
+            )
+            assessment = GoalSelfAssessment(**raw_res)
+            logger.info(f"Goal Self-Assessment: Status={assessment.completion_status} | Summary: {assessment.accomplishment_summary[:80]}...")
+            return assessment.model_dump()
+        except Exception as e:
+            logger.warning(f"Goal self-assessment call failed: {e}")
+            return {
+                "completion_status": "partially_met",
+                "accomplishment_summary": f"Executed trajectory steps to address goal '{goal}'.",
+                "detailed_explanation": f"Self-assessment call failed due to API error: {e}"
+            }
 
     def decide_visual_action(
         self,
@@ -240,7 +369,6 @@ Output strictly valid JSON matching the schema.
         crop_bottom = crop_top + crop_h
 
         cropped_img = img.crop((crop_left, crop_top, crop_right, crop_bottom))
-        # Upscale 2x to 800x800
         zoomed_img = cropped_img.resize((800, 800), Image.Resampling.LANCZOS)
 
         zoomed_path = str(Path(full_screenshot_path).parent / f"zoomed_crop_{target_x}_{target_y}.png")
@@ -268,12 +396,9 @@ Output strictly valid JSON matching the schema.
                 )
                 crop_obj = ZoomedCropActionDecision(**raw_decision)
                 
-                # Map 800x800 crop coordinates back to 1280x800 full viewport coordinates
-                # 800x800 image corresponds to 400x400 crop box (scale factor = 0.5)
                 full_x = int(round(crop_left + (crop_obj.crop_x / 2.0)))
                 full_y = int(round(crop_top + (crop_obj.crop_y / 2.0)))
 
-                # Clamp to viewport bounds 1280x800
                 full_x = max(0, min(full_x, width - 1))
                 full_y = max(0, min(full_y, height - 1))
 
@@ -391,8 +516,8 @@ Interactive Elements on Page (~{len(elements)} items):
 Action History (Recent steps):
 {history_summary}
 
-Analyze the current page state, goal, and past actions. Choose action from: "click", "click_coordinate", "type", "select", "scroll", "wait", "done".
-Output strictly valid JSON with keys: "action", "selector", "x", "y", "text", "value", "reasoning".
+Analyze the current page state, goal, and past actions. Choose action from: "click", "click_coordinate", "type", "select", "key", "scroll", "download", "ask_human", "wait", "done".
+Output strictly valid JSON with keys: "action", "selector", "x", "y", "text", "value", "key", "reasoning".
 """
         max_retries = 2
         for attempt in range(max_retries + 1):

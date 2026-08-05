@@ -19,7 +19,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from config.settings import check_api_key, validate_config
-from browser.controller import BrowserController
+from browser.controller import BrowserController, extract_domain
 from browser.perception import DOMPerception, capture_visual_state
 from browser.actions import execute_visual_action, execute_action
 from agent.reasoner import ReasonerAgent
@@ -40,6 +40,7 @@ def run_agent(
     max_steps: int = 15,
     headless: bool = False,
     mode: str = "visual",
+    session_file: Optional[str] = None,
     disable_vision: bool = False,
     grid_overlay: bool = True,
     task_id: Optional[str] = None,
@@ -47,8 +48,8 @@ def run_agent(
     step_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 ) -> Dict[str, Any]:
     """
-    Main entry point executing browser agent control loop with pure visual grounding,
-    100px grid overlay, post-click verification, and 2x zoom-retry loop recovery.
+    Generalized entry point executing browser agent control loop for ANY user goal on ANY website,
+    with human-handoff for login/CAPTCHA steps, session state persistence, and self-assessment.
     """
     check_api_key()
 
@@ -60,9 +61,16 @@ def run_agent(
     logs_dir = Path(__file__).resolve().parent / "logs"
     os.makedirs(logs_dir, exist_ok=True)
 
+    controller = BrowserController(width=1280, height=800, default_timeout_ms=20000)
+
+    # Session Auto-Detection & Resolution
+    active_session = session_file
+    if not active_session:
+        active_session = controller.get_session_path_for_url(url)
+
     mode_label = {
-        "visual": f"Pure Visual Computer-Use Agent (1280x800, GridOverlay={grid_overlay})",
-        "dom": "Pure DOM Perception Agent (Ablation)",
+        "visual": f"Pure Visual Computer-Use Agent (1280x800, Grid={grid_overlay})",
+        "dom": "Pure DOM Perception Agent",
         "hybrid": "Hybrid DOM + Vision Fallback Agent"
     }.get(active_mode, f"Mode: {active_mode}")
 
@@ -70,19 +78,20 @@ def run_agent(
     print(f"🤖 BROWSER AGENT INITIALIZED [{mode_label}]")
     print(f"🎯 Goal: {goal}")
     print(f"🌐 Starting URL: {url}")
+    print(f"🔑 Session State: {active_session or 'None (Fresh Session)'}")
     print(f"⚙️  Max Steps: {max_steps} | Headless: {headless} | Mode: {active_mode}")
     print("=" * 70 + "\n")
 
     context_vault = vault or ContextVault()
-    controller = BrowserController(width=1280, height=800, default_timeout_ms=20000)
     perception = DOMPerception()
     reasoner = ReasonerAgent(vault=context_vault)
     memory = StepMemory()
 
     final_status = "In progress"
+    self_assessment = None
 
     try:
-        controller.start(headless=headless)
+        controller.start(headless=headless, session_file=active_session)
         controller.goto(url)
 
         for step in range(1, max_steps + 1):
@@ -95,8 +104,6 @@ def run_agent(
             used_vision = False
 
             if active_mode == "visual":
-                # --- PURE VISUAL COMPUTER-USE LOOP WITH GROUNDING GRID ---
-                print("👁️ Capturing 1280x800 visual screenshot state with 100px grounding grid...")
                 visual_state = capture_visual_state(
                     controller,
                     screenshot_path=screenshot_path,
@@ -105,7 +112,37 @@ def run_agent(
 
                 print(f"📍 Page URL: {visual_state['current_url']}")
                 print(f"📄 Page Title: {visual_state['page_title']}")
-                print(f"📸 Visual Screenshot (Grid Overlay={grid_overlay}) saved: {screenshot_path}")
+                print(f"📸 Visual Screenshot saved: {screenshot_path}")
+
+                # --- HUMAN HANDOFF DETECTION (Login / CAPTCHA / 2FA / Payment) ---
+                human_req, req_type, req_reason = reasoner.detect_human_required(visual_state)
+                if human_req:
+                    print("\n" + "⏸" * 35)
+                    print(f"⏸ HUMAN ACTION NEEDED: [{req_type.upper()}] DETECTED!")
+                    print(f"⏸ Reason: {req_reason}")
+                    print("⏸ Please complete this action directly in the browser window.")
+                    print("⏸ Press ENTER here in the terminal once done to resume agent execution...")
+                    print("⏸" * 35 + "\n")
+
+                    controller.ensure_headed_mode()
+                    if hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
+                        try:
+                            input(">> Press ENTER to continue after completing human action... ")
+                        except (EOFError, KeyboardInterrupt):
+                            time.sleep(1.0)
+                    else:
+                        logger.info("Non-interactive environment detected. Skipping terminal input() wait.")
+
+                    # Persist session state after manual login/CAPTCHA resolution
+                    saved_sess = controller.save_session(url)
+                    print(f"💾 Session state saved to {saved_sess}")
+
+                    # Re-capture updated visual state after human intervention
+                    visual_state = capture_visual_state(
+                        controller,
+                        screenshot_path=screenshot_path,
+                        grid_overlay=grid_overlay
+                    )
 
                 # Check if zoom-retry recovery should trigger due to prior failure or loop
                 if memory.should_trigger_zoom_retry() and memory.history:
@@ -143,7 +180,6 @@ def run_agent(
                 page_state = visual_state
 
             elif active_mode == "dom":
-                # --- PURE DOM LOOP ---
                 page_state = perception.extract_state(controller.page, screenshot_path)
                 print(f"📍 Page URL: {page_state['url']}")
                 print(f"📄 Page Title: {page_state['title']}")
@@ -156,12 +192,10 @@ def run_agent(
                     history_summary=history_summary
                 )
 
-            else:
-                # --- HYBRID LOOP ---
+            else: # hybrid mode
                 page_state = perception.extract_state(controller.page, screenshot_path)
                 print(f"📍 Page URL: {page_state['url']}")
                 print(f"📄 Page Title: {page_state['title']}")
-                print(f"📸 Screenshot saved: {screenshot_path}")
 
                 trigger_vision = memory.should_trigger_vision_fallback() or memory.is_looping()
                 if trigger_vision:
@@ -196,6 +230,29 @@ def run_agent(
             y_coord = action_decision.get("y")
 
             print(f"💡 Reasoning: {reasoning}")
+
+            # Handle proactive agent request for human help ('ask_human')
+            if action_type == "ask_human":
+                print("\n" + "⏸" * 35)
+                print(f"⏸ AGENT PROACTIVELY REQUESTED HUMAN HELP!")
+                print(f"⏸ Request: {reasoning}")
+                print("⏸ Please complete the requested operation directly in the browser.")
+                print("⏸ Press ENTER here in terminal once finished to resume agent execution...")
+                print("⏸" * 35 + "\n")
+
+                controller.ensure_headed_mode()
+                if hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
+                    try:
+                        input(">> Press ENTER to continue after providing human help... ")
+                    except (EOFError, KeyboardInterrupt):
+                        time.sleep(1.0)
+                else:
+                    logger.info("Non-interactive environment detected. Skipping terminal input() wait.")
+
+                controller.save_session(url)
+                print(f"💾 Session state updated.")
+                continue
+
             coords_str = f" Coords=({x_coord}, {y_coord})" if x_coord is not None and y_coord is not None else ""
             sel_str = f" Selector='{selector}'" if selector else ""
             print(f"⚡ Action Chosen: {action_type}{coords_str}{sel_str} (Text: '{action_decision.get('text')}') [Vision={used_vision}]")
@@ -210,7 +267,7 @@ def run_agent(
                 after_screenshot_path = str(logs_dir / after_screenshot_name)
                 controller.screenshot(after_screenshot_path)
 
-                print("🔍 Performing Post-Action Visual Verification (Before vs After)...")
+                print("🔍 Performing Post-Action Visual Verification...")
                 verified_ok, v_reason = reasoner.verify_visual_action(
                     intended_action=action_decision,
                     before_screenshot_path=screenshot_path,
@@ -245,7 +302,7 @@ def run_agent(
                 used_vision_fallback=used_vision
             )
 
-            # Trigger step callback for real-time WebSocket telemetry if provided
+            # Telemetry step callback for real-time WebSocket dashboard
             if step_callback:
                 try:
                     img_base64 = ""
@@ -276,8 +333,8 @@ def run_agent(
                     logger.warning(f"Telemetry step_callback failed: {cb_err}")
 
             if action_type == "done":
-                final_status = f"Completed successfully: {reasoning}"
-                print(f"\n✅ TASK COMPLETED! Reason: {reasoning}")
+                final_status = f"Completed: {reasoning}"
+                print(f"\n✅ TASK DECLARED DONE BY AGENT! Reason: {reasoning}")
                 break
 
             if active_mode == "visual":
@@ -291,6 +348,15 @@ def run_agent(
         else:
             final_status = f"Reached maximum steps limit ({max_steps})."
             print(f"\n⌛ MAX STEPS ({max_steps}) REACHED without declaring 'done'.")
+
+        # --- GOAL SELF-ASSESSMENT STEP ---
+        print("\n🔍 Conducting Agent Goal Completion Self-Assessment...")
+        final_visual_state = capture_visual_state(controller, screenshot_path=str(logs_dir / "final_state.png"))
+        self_assessment = reasoner.assess_goal_completion(
+            goal=goal,
+            history_summary=memory.get_summary(),
+            visual_state=final_visual_state
+        )
 
     except Exception as e:
         logger.error(f"Fatal error during execution loop: {e}")
@@ -307,6 +373,8 @@ def run_agent(
         "mode": active_mode,
         "final_status": final_status,
         "total_steps": len(memory.history),
+        "session_saved": controller.get_session_path_for_url(url),
+        "self_assessment": self_assessment,
         "history": memory.history
     }
 
@@ -315,20 +383,30 @@ def run_agent(
         json.dump(summary_data, f, indent=2)
 
     print("\n" + "=" * 70)
-    print("📊 EXECUTION SUMMARY")
+    print("📊 EXECUTION SUMMARY & SELF-ASSESSMENT")
     print(f"Status: {final_status}")
     print(f"Total Steps Taken: {len(memory.history)}")
     print(f"Mode: {active_mode}")
+
+    if self_assessment:
+        print("\n" + "-" * 50)
+        print("📝 AGENT SELF-ASSESSMENT REPORT")
+        print(f"Completion Status: {self_assessment.get('completion_status', 'N/A').upper()}")
+        print(f"Accomplishment: {self_assessment.get('accomplishment_summary')}")
+        print(f"Explanation: {self_assessment.get('detailed_explanation')}")
+        print("-" * 50)
+
     print(f"Detailed Log Exported: {summary_file}")
     print("=" * 70 + "\n")
 
     return summary_data
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Pure Visual Computer-Use Browser Agent CLI")
-    parser.add_argument("--goal", type=str, required=True, help="Natural language objective for the agent")
+    parser = argparse.ArgumentParser(description="Generalized Computer-Use Browser Agent CLI")
+    parser.add_argument("--goal", type=str, required=True, help="Any free-text user goal or task description")
     parser.add_argument("--url", type=str, required=True, help="Initial target web page URL")
-    parser.add_argument("--mode", type=str, choices=["visual", "dom", "hybrid"], default="visual", help="Agent operational mode (visual, dom, hybrid)")
+    parser.add_argument("--mode", type=str, choices=["visual", "dom", "hybrid"], default="visual", help="Agent operational mode")
+    parser.add_argument("--session", type=str, default=None, help="Explicit path to session storage json file")
     parser.add_argument("--max-steps", type=int, default=15, help="Maximum execution steps allowed (default: 15)")
     parser.add_argument("--headless", action="store_true", default=False, help="Run browser in headless mode")
     parser.add_argument("--no-grid", action="store_true", default=False, help="Disable 100px coordinate grid overlay")
@@ -343,5 +421,6 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         headless=args.headless,
         mode="dom" if args.no_vision else args.mode,
+        session_file=args.session,
         grid_overlay=not args.no_grid
     )

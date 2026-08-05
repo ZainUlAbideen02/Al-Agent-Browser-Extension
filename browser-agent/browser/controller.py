@@ -3,6 +3,7 @@ import time
 import base64
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Optional, Dict, Any, Tuple
 from playwright.sync_api import (
     sync_playwright,
@@ -23,10 +24,21 @@ DEFAULT_TIMEOUT_MS = 20000
 DEFAULT_VIEWPORT_WIDTH = 1280
 DEFAULT_VIEWPORT_HEIGHT = 800
 
+def extract_domain(url: str) -> str:
+    """Extract clean domain name from URL for session persistence (e.g. 'https://gmail.com/foo' -> 'gmail.com')."""
+    if not url.startswith("http://") and not url.startswith("https://") and not url.startswith("file://"):
+        url = f"https://{url}"
+    parsed = urlparse(url)
+    netloc = parsed.netloc or parsed.path
+    if ":" in netloc:
+        netloc = netloc.split(":")[0]
+    return netloc.lower() or "default_domain"
+
 class BrowserController:
     """
     Playwright controller supporting fixed 1280x800 viewport sizing, visual state captures,
-    exponential backoff navigation retries, smooth mouse cursor movement, and native hardware actions.
+    exponential backoff navigation retries, session state persistence, smooth mouse movement,
+    and headed browser switching for human handoff.
     """
 
     def __init__(
@@ -58,6 +70,11 @@ class BrowserController:
         self._browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
+        self._headless: bool = False
+        self._session_file: Optional[str] = None
+
+        self.sessions_dir = Path(__file__).resolve().parent.parent / "sessions"
+        self.sessions_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def page(self) -> Page:
@@ -65,9 +82,33 @@ class BrowserController:
             raise RuntimeError("Browser is not started. Call controller.start() first.")
         return self._page
 
-    def start(self, headless: bool = False) -> None:
-        """Launch Playwright browser session locked to 1280x800 viewport."""
-        logger.info(f"Starting browser (viewport={self.width}x{self.height}, headless={headless}, timeout={self.default_timeout_ms}ms)...")
+    def get_session_path_for_url(self, url: str) -> Optional[str]:
+        """Returns session json filepath if saved session exists for target domain."""
+        domain = extract_domain(url)
+        session_file = self.sessions_dir / f"{domain}.json"
+        if session_file.exists():
+            return str(session_file)
+        return None
+
+    def save_session(self, url_or_domain: str) -> str:
+        """Saves current browser context storage state (cookies/localstorage) for target domain."""
+        if not self.context:
+            raise RuntimeError("Cannot save session: browser context is not active.")
+        domain = extract_domain(url_or_domain)
+        session_file = self.sessions_dir / f"{domain}.json"
+        self.context.storage_state(path=str(session_file))
+        logger.info(f"Saved session storage state to {session_file}")
+        return str(session_file)
+
+    def start(self, headless: bool = False, session_file: Optional[str] = None) -> None:
+        """Launch Playwright browser session locked to 1280x800 viewport with optional session state."""
+        self._headless = headless
+        self._session_file = session_file
+
+        logger.info(
+            f"Starting browser (viewport={self.width}x{self.height}, headless={headless}, "
+            f"session={session_file or 'None'}, timeout={self.default_timeout_ms}ms)..."
+        )
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(
             headless=headless,
@@ -76,15 +117,49 @@ class BrowserController:
                 "--disable-blink-features=AutomationControlled"
             ]
         )
-        self.context = self._browser.new_context(
-            viewport={"width": self.width, "height": self.height},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+
+        context_kwargs = {
+            "viewport": {"width": self.width, "height": self.height},
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        if session_file and Path(session_file).exists():
+            context_kwargs["storage_state"] = session_file
+            logger.info(f"Loaded existing session storage state from {session_file}")
+
+        self.context = self._browser.new_context(**context_kwargs)
         self._page = self.context.new_page()
         self._page.set_viewport_size({"width": self.width, "height": self.height})
         self._page.set_default_timeout(self.default_timeout_ms)
         self._page.set_default_navigation_timeout(self.default_timeout_ms)
         logger.info(f"Browser session initialized locked to {self.width}x{self.height} viewport.")
+
+    def ensure_headed_mode(self) -> None:
+        """
+        Switches browser session from headless mode to visible headed mode for human handoff interaction.
+        Preserves current URL and session storage state.
+        """
+        if not self._headless:
+            return  # Already in headed (visible) mode
+
+        logger.info("Switching browser from headless to headed (visible) mode for human interaction...")
+        curr_url = self.page.url if self._page else "about:blank"
+        temp_session = str(self.sessions_dir / "_temp_handoff.json")
+        
+        if self.context:
+            self.context.storage_state(path=temp_session)
+
+        self.close()
+        self.start(headless=False, session_file=temp_session if Path(temp_session).exists() else None)
+        
+        if curr_url and curr_url != "about:blank":
+            self.goto(curr_url)
+
+        if Path(temp_session).exists():
+            try:
+                os.remove(temp_session)
+            except Exception:
+                pass
 
     def goto(self, url: str, timeout: Optional[int] = None, max_retries: int = 3) -> None:
         """Navigate browser to specified URL with exponential backoff network retry guard (1s, 2s, 4s)."""
@@ -178,7 +253,7 @@ class BrowserController:
         """Alias matching key_press."""
         self.key_press(key)
 
-    # Legacy DOM Helper Methods (retained for DOM/hybrid modes)
+    # Legacy DOM Helper Methods
     def click_coordinate(self, x: int, y: int) -> None:
         """Legacy helper matching mouse_click(x, y)."""
         self.mouse_click(x, y)
