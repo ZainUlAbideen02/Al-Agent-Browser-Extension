@@ -457,8 +457,15 @@ def run_agent(
         json.dump(summary_data, f, indent=2)
 
     # --- RESULT SUMMARY NOTIFICATION BLOCK ---
-    assess_status = (self_assessment.get("completion_status") if self_assessment else "COMPLETED").upper()
-    accomplishment = (self_assessment.get("accomplishment_summary") if self_assessment else final_status)
+    if "Failed" in final_status or final_status.startswith("Stuck"):
+        assess_status = "FAILED"
+        accomplishment = final_status
+    elif self_assessment:
+        assess_status = self_assessment.get("completion_status", "COMPLETED").upper()
+        accomplishment = self_assessment.get("accomplishment_summary", final_status)
+    else:
+        assess_status = "COMPLETED"
+        accomplishment = final_status
 
     print("\n" + "🔔" * 35)
     print(f"🔔 TASK EXECUTION RESULT SUMMARY")
