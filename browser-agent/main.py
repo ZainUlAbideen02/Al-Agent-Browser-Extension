@@ -481,6 +481,7 @@ def parse_args():
     parser.add_argument("--goal", type=str, default=None, help="Free-text user goal description")
     parser.add_argument("--url", type=str, default=None, help="Initial target web page URL")
     parser.add_argument("--run", type=str, default=None, help="Run a saved task preset by name from config/saved_tasks.json")
+    parser.add_argument("--save-as", type=str, default=None, help="Save current --goal and --url as a task preset name after execution")
     parser.add_argument("--list", action="store_true", default=False, help="List all saved task presets")
     parser.add_argument("--add", type=str, default=None, help="Add a new saved task preset by name")
     parser.add_argument("--remove", type=str, default=None, help="Remove a saved task preset by name")
@@ -501,9 +502,12 @@ if __name__ == "__main__":
         print("\n" + "=" * 70)
         print("📋 SAVED TASK PRESETS")
         print("=" * 70)
-        for t in tasks:
-            print(f"  • {t['name']:<15} | Goal: {t['goal']}")
-            print(f"    URL: {t['url']} | Mode: {t['mode']}")
+        if not tasks:
+            print("  (No saved tasks found.)")
+        else:
+            for t in tasks:
+                print(f"  • {t['name']:<15} | Goal: {t['goal']}")
+                print(f"    URL: {t['url']} | Mode: {t['mode']}")
         print("=" * 70 + "\n")
         sys.exit(0)
 
@@ -515,7 +519,7 @@ if __name__ == "__main__":
             print(f"❌ Task preset '{args.remove}' not found.")
         sys.exit(0)
 
-    # 3. Handle --add
+    # 3. Handle --add standalone preset addition
     if args.add:
         goal_val = args.goal or input("Enter Natural Language Goal: ").strip()
         url_val = args.url or input("Enter Target URL: ").strip()
@@ -544,6 +548,11 @@ if __name__ == "__main__":
         print("❌ Error: Both --goal and --url (or --run <task_name>) are required.")
         print("💡 Use 'python run.py' for interactive menu, or 'python main.py --list' to see saved tasks.")
         sys.exit(1)
+
+    # Optionally save preset if --save-as requested
+    if args.save_as:
+        add_task(name=args.save_as, goal=active_goal, url=active_url, mode=active_mode)
+        print(f"💾 Saved preset '{args.save_as}'.")
 
     run_agent(
         goal=active_goal,

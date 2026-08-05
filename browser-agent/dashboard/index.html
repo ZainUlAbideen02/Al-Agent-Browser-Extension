@@ -3,171 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visual Agent Control & Telemetry Dashboard</title>
+    <title>Visual Agent Control & Telemetry Studio</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
-        <!-- Header Bar -->
+        <!-- Top Navigation Bar -->
         <header class="app-header">
-            <div class="logo-container">
-                <div class="logo-badge">👁️</div>
-                <div>
-                    <h1>Visual Agent Control Center</h1>
-                    <p class="subtitle">Pure Visual Computer-Use & Hardware Telemetry Suite</p>
+            <div class="logo-group">
+                <div class="logo-icon">🔥</div>
+                <div class="logo-text">
+                    <h1>Antigravity Visual Agent</h1>
+                    <span class="logo-sub">Pure Computer-Use Telemetry & Automation Studio</span>
                 </div>
             </div>
-            <div class="header-right">
-                <div class="telemetry-pill">
-                    <span class="pill-label">Model:</span>
-                    <span class="pill-value" id="activeModelPill">qwen3.6-27b</span>
+
+            <!-- Tab Navigation -->
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="live">
+                    <span class="tab-icon">⚡</span> Live Control & Stream
+                </button>
+                <button class="nav-tab" data-tab="tasks">
+                    <span class="tab-icon">📁</span> Saved Tasks Preset Store
+                </button>
+                <button class="nav-tab" data-tab="history">
+                    <span class="tab-icon">📜</span> Execution History
+                </button>
+            </nav>
+
+            <div class="header-status">
+                <div class="status-chip">
+                    <span class="chip-label">Model:</span>
+                    <span class="chip-val">qwen/qwen3.6-27b</span>
                 </div>
-                <div class="ws-status" id="wsStatus">
-                    <span class="status-dot disconnected" id="statusDot"></span>
-                    <span id="statusText">Disconnected</span>
+                <div class="ws-indicator" id="wsIndicator">
+                    <span class="ws-dot disconnected" id="wsDot"></span>
+                    <span id="wsStatusText">Disconnected</span>
                 </div>
             </div>
         </header>
 
-        <!-- Metrics Overview Row -->
-        <section class="metrics-row">
-            <div class="metric-card">
-                <div class="metric-icon">⏱️</div>
-                <div class="metric-body">
-                    <span class="metric-title">Step Latency</span>
-                    <span class="metric-value" id="latencyVal">0.0s</span>
+        <!-- Live View Tab Content -->
+        <div class="tab-content active" id="tab-live">
+            <!-- Metrics Banner Row -->
+            <section class="metrics-banner">
+                <div class="metric-box">
+                    <span class="metric-label">Step Latency</span>
+                    <span class="metric-val" id="metricLatency">0.00s</span>
                 </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon">🎯</div>
-                <div class="metric-body">
-                    <span class="metric-title">Target Coordinate</span>
-                    <span class="metric-value" id="metricCoordsVal">(0, 0)</span>
+                <div class="metric-box">
+                    <span class="metric-label">Target Coordinate</span>
+                    <span class="metric-val highlight" id="metricCoords">(0, 0)</span>
                 </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon">📈</div>
-                <div class="metric-body">
-                    <span class="metric-title">Action Success Rate</span>
-                    <span class="metric-value" id="successRateVal">100%</span>
+                <div class="metric-box">
+                    <span class="metric-label">Last Action</span>
+                    <span class="metric-val" id="metricAction">Idle</span>
                 </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon">⚡</div>
-                <div class="metric-body">
-                    <span class="metric-title">Stream Telemetry</span>
-                    <span class="metric-value" id="streamFpsVal">0 FPS</span>
+                <div class="metric-box">
+                    <span class="metric-label">Mode</span>
+                    <span class="metric-val" id="metricMode">Pure Visual (1280x800)</span>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- Main Workspace Grid -->
-        <main class="main-grid">
-            <!-- Left Column: Control Panel & Preset Templates -->
-            <section class="panel control-panel">
-                <h2>🚀 Task Control Panel</h2>
-                <form id="agentForm">
-                    <div class="form-group">
-                        <label for="templateSelect">Quick Goal Templates</label>
-                        <select id="templateSelect">
-                            <option value="" selected>Custom Goal Entry...</option>
-                            <option value="login">Heroku Login Form Fill</option>
-                            <option value="canvas">Canvas Visual Disambiguation Test</option>
-                            <option value="books">Browse Category on BooksToScrape</option>
-                        </select>
+            <main class="workspace-grid">
+                <!-- Control Panel (Left Sidebar) -->
+                <aside class="panel control-panel">
+                    <div class="panel-head">
+                        <h2>🚀 Launch New Goal</h2>
                     </div>
-
-                    <div class="form-group">
-                        <label for="targetUrl">Target Web URL</label>
-                        <input type="url" id="targetUrl" placeholder="https://the-internet.herokuapp.com/login" required value="https://the-internet.herokuapp.com/login">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="goal">Natural Language Objective</label>
-                        <textarea id="goal" rows="3" placeholder="Describe what the agent should accomplish..." required>Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button</textarea>
-                    </div>
-
-                    <div class="form-row">
+                    <form id="launchForm" class="control-form">
                         <div class="form-group">
-                            <label for="resolution">Viewport Resolution</label>
-                            <select id="resolution">
-                                <option value="1280x800" selected>1280 x 800 (HD)</option>
-                                <option value="1920x1080">1920 x 1080 (FHD)</option>
-                            </select>
+                            <label for="taskGoal">Natural Language Objective Goal</label>
+                            <textarea id="taskGoal" rows="3" placeholder="Describe any goal on any website..." required>Log in with username tomsmith and password SuperSecretPassword!</textarea>
                         </div>
+
                         <div class="form-group">
-                            <label for="maxSteps">Max Steps</label>
-                            <input type="number" id="maxSteps" min="1" max="30" value="15">
+                            <label for="taskUrl">Target Starting URL</label>
+                            <input type="url" id="taskUrl" placeholder="https://..." required value="https://the-internet.herokuapp.com/login">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="taskMode">Perception Mode</label>
+                                <select id="taskMode">
+                                    <option value="visual" selected>Pure Visual (Coordinates)</option>
+                                    <option value="hybrid">Hybrid (DOM + Vision Fallback)</option>
+                                    <option value="dom">DOM Selectors Only</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="taskMaxSteps">Max Steps</label>
+                                <input type="number" id="taskMaxSteps" min="1" max="50" value="15">
+                            </div>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="savePresetCheck">
+                                <span>Save this task as a reusable preset</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group" id="presetNameGroup" style="display: none;">
+                            <label for="presetNameInput">Preset Name</label>
+                            <input type="text" id="presetNameInput" placeholder="e.g. heroku_login">
+                        </div>
+
+                        <div class="btn-actions">
+                            <button type="submit" id="startBtn" class="btn btn-terracotta">
+                                <span>▶ Launch Agent</span>
+                            </button>
+                            <button type="button" id="stopBtn" class="btn btn-outline-danger" disabled>
+                                <span>⏹ Abort Task</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Active Execution Status Card -->
+                    <div class="execution-card" id="executionCard">
+                        <div class="exec-head">
+                            <h3>Active Execution State</h3>
+                            <span class="badge badge-idle" id="execBadge">Idle</span>
+                        </div>
+                        <div class="exec-row">
+                            <span class="exec-label">Task ID:</span>
+                            <span class="exec-val" id="execTaskId">None</span>
+                        </div>
+                        <div class="exec-row">
+                            <span class="exec-label">Step Progress:</span>
+                            <span class="exec-val" id="execProgress">0 / 0</span>
                         </div>
                     </div>
+                </aside>
 
-                    <div class="btn-group">
-                        <button type="submit" id="startBtn" class="btn btn-primary">
-                            <span>▶ Launch Task</span>
-                        </button>
-                        <button type="button" id="stopBtn" class="btn btn-danger" disabled>
-                            <span>⏹ Stop Task</span>
-                        </button>
+                <!-- Live Screen Stream & Crosshair Overlay (Center Stage) -->
+                <section class="panel viewport-panel">
+                    <div class="panel-head">
+                        <h2>📸 Visual Screen Telemetry</h2>
+                        <div class="viewport-meta">
+                            <span id="pageUrlMeta">URL: Idle</span>
+                        </div>
                     </div>
-                </form>
+                    <div class="viewport-stage" id="viewportStage">
+                        <div class="stage-placeholder" id="stagePlaceholder">
+                            <div class="placeholder-icon">👁️</div>
+                            <p>Waiting for live visual screenshot telemetry stream...</p>
+                        </div>
+                        <img id="liveScreenImg" class="screen-img" style="display: none;" alt="Live Viewport">
 
-                <!-- Active Task Stats Card -->
-                <div class="task-stats-card" id="taskStatsCard">
-                    <h3>📊 Active Execution Task</h3>
-                    <div class="stat-row">
-                        <span class="stat-label">Task ID:</span>
-                        <span class="stat-value" id="taskIdVal">None</span>
+                        <!-- Crosshair Coordinate Target Overlay Pin -->
+                        <div id="targetCrosshair" class="target-crosshair" style="display: none;">
+                            <div class="cross-line-h"></div>
+                            <div class="cross-line-v"></div>
+                            <div class="target-pulse"></div>
+                            <div class="coord-tag" id="coordTag">(0, 0)</div>
+                        </div>
                     </div>
-                    <div class="stat-row">
-                        <span class="stat-label">State:</span>
-                        <span class="badge badge-info" id="taskStateBadge">Idle</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Step Progress:</span>
-                        <span class="stat-value" id="stepsVal">0 / 0</span>
-                    </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- Middle Column: Visual Live Stream & Crosshair Cursor Overlay -->
-            <section class="panel preview-panel">
-                <div class="panel-header">
-                    <h2>📸 Live Screen & Crosshair Cursor Overlay</h2>
-                    <span class="badge badge-vision" id="visionModeBadge">👁️ Pure Visual Agent Active</span>
-                </div>
-                <div class="preview-container" id="previewContainer">
-                    <div class="preview-placeholder" id="previewPlaceholder">
-                        <span>Waiting for real-time base64 telemetry stream...</span>
+                <!-- Step Reasoning Log Feed (Right Sidebar) -->
+                <aside class="panel feed-panel">
+                    <div class="panel-head">
+                        <h2>⚡ Step Reasoning Feed</h2>
+                        <button id="clearLogsBtn" class="btn-ghost">Clear</button>
                     </div>
-                    <img id="livePreviewImg" class="preview-img" style="display: none;" alt="Live Browser View">
-                    
-                    <!-- Pulsing Crosshair Target Marker Overlay -->
-                    <div id="targetOverlayMarker" class="target-marker" style="display: none;">
-                        <div class="crosshair-h"></div>
-                        <div class="crosshair-v"></div>
-                        <div class="marker-pulse"></div>
-                        <div class="marker-label" id="markerLabel">(0, 0)</div>
+                    <div class="feed-list" id="feedList">
+                        <div class="feed-empty">No telemetry events recorded yet.</div>
                     </div>
-                </div>
-                <div class="preview-meta">
-                    <span id="previewPageUrl">URL: N/A</span>
-                </div>
-            </section>
+                </aside>
+            </main>
+        </div>
 
-            <!-- Right Column: Step Telemetry Log Feed -->
-            <section class="panel feed-panel">
-                <div class="panel-header">
-                    <h2>⚡ Step Telemetry & Reasoning Feed</h2>
-                    <button id="clearLogsBtn" class="btn btn-secondary btn-sm">Clear Logs</button>
+        <!-- Saved Tasks Tab Content -->
+        <div class="tab-content" id="tab-tasks">
+            <div class="tasks-page-header">
+                <div>
+                    <h2>📁 Saved Task Presets</h2>
+                    <p>Reusable task automation workflows stored in config/saved_tasks.json</p>
                 </div>
-                <div class="log-feed" id="logFeed">
-                    <div class="empty-feed-msg">No step telemetry events recorded yet.</div>
+                <button id="openNewTaskModalBtn" class="btn btn-terracotta">+ New Task Preset</button>
+            </div>
+            <div class="tasks-grid" id="tasksGrid">
+                <!-- Task Cards dynamically rendered here -->
+            </div>
+        </div>
+
+        <!-- Run History Tab Content -->
+        <div class="tab-content" id="tab-history">
+            <div class="history-page-header">
+                <div>
+                    <h2>📜 Execution Run History</h2>
+                    <p>Audit trail and visual step screenshots of past agent runs</p>
                 </div>
-            </section>
-        </main>
+                <button id="refreshHistoryBtn" class="btn btn-ghost">🔄 Refresh History</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <!-- History items dynamically rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- New Task Modal -->
+    <div class="modal-overlay" id="newTaskModal">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3>➕ Create Saved Task Preset</h3>
+                <button class="close-modal-btn" id="closeTaskModalBtn">&times;</button>
+            </div>
+            <form id="newTaskForm" class="modal-form">
+                <div class="form-group">
+                    <label for="modalTaskName">Task Identifier Name</label>
+                    <input type="text" id="modalTaskName" placeholder="e.g. check_email" required>
+                </div>
+                <div class="form-group">
+                    <label for="modalTaskGoal">Natural Language Goal</label>
+                    <textarea id="modalTaskGoal" rows="3" placeholder="Describe the goal..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="modalTaskUrl">Starting Web URL</label>
+                    <input type="url" id="modalTaskUrl" placeholder="https://..." required>
+                </div>
+                <div class="form-group">
+                    <label for="modalTaskMode">Perception Mode</label>
+                    <select id="modalTaskMode">
+                        <option value="visual" selected>Pure Visual (Coordinates)</option>
+                        <option value="hybrid">Hybrid Mode</option>
+                        <option value="dom">DOM Mode</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-ghost" id="cancelModalBtn">Cancel</button>
+                    <button type="submit" class="btn btn-terracotta">Save Task Preset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- History Detail Viewer Modal -->
+    <div class="modal-overlay" id="historyModal">
+        <div class="modal-card modal-lg">
+            <div class="modal-head">
+                <h3 id="historyModalTitle">Run Trajectory Details</h3>
+                <button class="close-modal-btn" id="closeHistoryModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" id="historyModalBody">
+                <!-- Trajectory details rendered here -->
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

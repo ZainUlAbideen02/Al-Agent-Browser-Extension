@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from main import run_agent
+from agent.task_store import list_tasks, add_task, remove_task, get_task, get_saved_tasks
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -94,15 +95,25 @@ class StartAgentRequest(BaseModel):
     width: int = Field(default=1280, ge=640, le=2560)
     height: int = Field(default=800, ge=480, le=1440)
     mode: str = Field(default="visual", example="visual")
+    save_as: Optional[str] = Field(default=None, example="login_preset")
+
+class TaskPresetRequest(BaseModel):
+    name: str
+    goal: str
+    url: str
+    mode: str = "visual"
 
 class StartAgentResponse(BaseModel):
     task_id: str
     status: str
     message: str
 
-def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, width: int, height: int, mode: str):
+def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, width: int, height: int, mode: str, save_as: Optional[str] = None):
     """Worker wrapper executed in background thread."""
     task_store[task_id]["status"] = "running"
+    if save_as:
+        add_task(name=save_as, goal=goal, url=url, mode=mode)
+
     try:
         summary = run_agent(
             goal=goal,
@@ -164,7 +175,8 @@ async def start_agent(request: StartAgentRequest):
             request.max_steps,
             request.width,
             request.height,
-            request.mode
+            request.mode,
+            request.save_as
         )
     )
     active_tasks[task_id] = async_task
@@ -194,6 +206,46 @@ async def stop_agent(task_id: str):
     task_store[task_id]["status"] = "cancelled"
     return {"task_id": task_id, "status": "cancelled", "message": "Agent task cancelled gracefully."}
 
+@app.get("/api/tasks")
+async def get_tasks_api():
+    """Retrieve saved task presets."""
+    return list_tasks()
+
+@app.post("/api/tasks")
+async def add_task_api(req: TaskPresetRequest):
+    """Add a new task preset."""
+    res = add_task(name=req.name, goal=req.goal, url=req.url, mode=req.mode)
+    return {"status": "success", "task": res}
+
+@app.delete("/api/tasks/{name}")
+async def remove_task_api(name: str):
+    """Delete a task preset by name."""
+    if remove_task(name):
+        return {"status": "success", "removed": name}
+    raise HTTPException(status_code=404, detail=f"Task preset {name} not found.")
+
+@app.get("/api/history")
+async def get_run_history():
+    """Retrieve history of past agent runs from logs/run_summary.json and logs directory."""
+    logs_dir = Path(__file__).resolve().parent / "logs"
+    summary_file = logs_dir / "run_summary.json"
+    history = []
+    
+    if summary_file.exists():
+        try:
+            with open(summary_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                history.append(data)
+        except Exception as e:
+            logger.warning(f"Could not read run_summary.json: {e}")
+
+    # Also query task_store for completed tasks
+    for tid, tinfo in task_store.items():
+        if tinfo.get("summary") and tinfo["summary"] not in history:
+            history.append(tinfo["summary"])
+
+    return history
+
 @app.websocket("/ws/telemetry")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -206,6 +258,11 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.warning(f"WebSocket connection error: {e}")
         manager.disconnect(websocket)
+
+# Mount logs directory for static screenshot access
+logs_dir = Path(__file__).resolve().parent / "logs"
+if logs_dir.exists():
+    app.mount("/logs", StaticFiles(directory=str(logs_dir)), name="logs")
 
 dashboard_dir = Path(__file__).resolve().parent / "dashboard"
 if dashboard_dir.exists():

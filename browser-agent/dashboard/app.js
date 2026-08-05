@@ -1,294 +1,385 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const wsStatus = document.getElementById("wsStatus");
-    const statusDot = document.getElementById("statusDot");
-    const statusText = document.getElementById("statusText");
+// Antigravity Visual Agent Control Studio Application Logic
 
-    const templateSelect = document.getElementById("templateSelect");
-    const agentForm = document.getElementById("agentForm");
-    const targetUrlInput = document.getElementById("targetUrl");
-    const goalInput = document.getElementById("goal");
-    const resolutionSelect = document.getElementById("resolution");
-    const maxStepsInput = document.getElementById("maxSteps");
+document.addEventListener("DOMContentLoaded", () => {
+    // DOM Elements - Tab Navigation
+    const tabs = document.querySelectorAll(".nav-tab");
+    const tabContents = document.querySelectorAll(".tab-content");
+
+    // DOM Elements - Live Telemetry
+    const wsDot = document.getElementById("wsDot");
+    const wsStatusText = document.getElementById("wsStatusText");
+    const metricLatency = document.getElementById("metricLatency");
+    const metricCoords = document.getElementById("metricCoords");
+    const metricAction = document.getElementById("metricAction");
+    const metricMode = document.getElementById("metricMode");
+    const pageUrlMeta = document.getElementById("pageUrlMeta");
+
+    // Viewport & Crosshair
+    const viewportStage = document.getElementById("viewportStage");
+    const stagePlaceholder = document.getElementById("stagePlaceholder");
+    const liveScreenImg = document.getElementById("liveScreenImg");
+    const targetCrosshair = document.getElementById("targetCrosshair");
+    const coordTag = document.getElementById("coordTag");
+    const feedList = document.getElementById("feedList");
+
+    // Control Form
+    const launchForm = document.getElementById("launchForm");
+    const taskGoal = document.getElementById("taskGoal");
+    const taskUrl = document.getElementById("taskUrl");
+    const taskMode = document.getElementById("taskMode");
+    const taskMaxSteps = document.getElementById("taskMaxSteps");
+    const savePresetCheck = document.getElementById("savePresetCheck");
+    const presetNameGroup = document.getElementById("presetNameGroup");
+    const presetNameInput = document.getElementById("presetNameInput");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-
-    const activeModelPill = document.getElementById("activeModelPill");
-    const latencyVal = document.getElementById("latencyVal");
-    const metricCoordsVal = document.getElementById("metricCoordsVal");
-    const successRateVal = document.getElementById("successRateVal");
-    const streamFpsVal = document.getElementById("streamFpsVal");
-
-    const taskIdVal = document.getElementById("taskIdVal");
-    const taskStateBadge = document.getElementById("taskStateBadge");
-    const stepsVal = document.getElementById("stepsVal");
-
-    const previewContainer = document.getElementById("previewContainer");
-    const previewPlaceholder = document.getElementById("previewPlaceholder");
-    const livePreviewImg = document.getElementById("livePreviewImg");
-    const previewPageUrl = document.getElementById("previewPageUrl");
-    const targetOverlayMarker = document.getElementById("targetOverlayMarker");
-    const markerLabel = document.getElementById("markerLabel");
-
-    const logFeed = document.getElementById("logFeed");
     const clearLogsBtn = document.getElementById("clearLogsBtn");
 
-    let ws = null;
-    let currentTaskId = null;
-    let stepCounter = 0;
-    let activeWidth = 1280;
-    let activeHeight = 800;
+    // Execution Card
+    const execBadge = document.getElementById("execBadge");
+    const execTaskId = document.getElementById("execTaskId");
+    const execProgress = document.getElementById("execProgress");
 
-    let successfulSteps = 0;
-    let totalStepsRecorded = 0;
-    let lastStepTimestamp = null;
+    // Tasks & History
+    const tasksGrid = document.getElementById("tasksGrid");
+    const historyList = document.getElementById("historyList");
+    const openNewTaskModalBtn = document.getElementById("openNewTaskModalBtn");
+    const newTaskModal = document.getElementById("newTaskModal");
+    const closeTaskModalBtn = document.getElementById("closeTaskModalBtn");
+    const cancelModalBtn = document.getElementById("cancelModalBtn");
+    const newTaskForm = document.getElementById("newTaskForm");
 
-    let frameCount = 0;
-    let lastFpsReset = Date.now();
+    // State Variables
+    let socket = null;
+    let activeTaskId = null;
+    let currentStepCount = 0;
+    let maxStepCount = 15;
 
-    // Template Selector presets
-    templateSelect.addEventListener("change", () => {
-        const val = templateSelect.value;
-        if (val === "login") {
-            targetUrlInput.value = "https://the-internet.herokuapp.com/login";
-            goalInput.value = "Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button";
-        } else if (val === "canvas") {
-            targetUrlInput.value = "file:///c:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html";
-            goalInput.value = "Click the canvas button visually labeled 'CLICK ME TO WIN - TARGET'";
-        } else if (val === "books") {
-            targetUrlInput.value = "https://books.toscrape.com";
-            goalInput.value = "Navigate to Travel category and select the first book";
-        }
+    // --- 1. Tab Navigation Handler ---
+    tabs.forEach(tab => {
+        tab.addEventListener("click", () => {
+            tabs.forEach(t => t.classList.remove("active"));
+            tabContents.forEach(c => c.classList.remove("active"));
+
+            tab.classList.add("active");
+            const targetId = `tab-${tab.getAttribute("data-tab")}`;
+            const targetContent = document.getElementById(targetId);
+            if (targetContent) targetContent.classList.add("active");
+
+            if (tab.getAttribute("data-tab") === "tasks") {
+                loadTasks();
+            } else if (tab.getAttribute("data-tab") === "history") {
+                loadHistory();
+            }
+        });
     });
 
-    // Connect to WebSocket Server
+    // Checkbox toggle for preset name input
+    savePresetCheck.addEventListener("change", () => {
+        presetNameGroup.style.display = savePresetCheck.checked ? "block" : "none";
+    });
+
+    // --- 2. WebSocket Telemetry Connection ---
     function connectWebSocket() {
-        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsHost = window.location.host || "localhost:8000";
-        const wsUrl = `${wsProtocol}//${wsHost}/ws/telemetry`;
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
 
-        ws = new WebSocket(wsUrl);
+        socket = new WebSocket(wsUrl);
 
-        ws.onopen = () => {
-            statusDot.className = "status-dot connected";
-            statusText.textContent = "Connected";
-            console.log("WebSocket connected to visual telemetry server.");
+        socket.onopen = () => {
+            wsDot.className = "ws-dot connected";
+            wsStatusText.textContent = "Telemetry Live";
         };
 
-        ws.onclose = () => {
-            statusDot.className = "status-dot disconnected";
-            statusText.textContent = "Disconnected";
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleTelemetryEvent(data);
+            } catch (err) {
+                console.warn("Telemetry JSON parse error:", err);
+            }
+        };
+
+        socket.onclose = () => {
+            wsDot.className = "ws-dot disconnected";
+            wsStatusText.textContent = "Disconnected";
             setTimeout(connectWebSocket, 3000);
         };
 
-        ws.onerror = (err) => {
+        socket.onerror = (err) => {
             console.error("WebSocket error:", err);
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const frame = JSON.parse(event.data);
-                handleTelemetryFrame(frame);
-            } catch (e) {
-                console.error("Failed to parse telemetry frame:", e);
-            }
         };
     }
 
-    connectWebSocket();
+    // --- 3. Telemetry Event Handler & Crosshair Pinning ---
+    function handleTelemetryEvent(data) {
+        if (data.event === "step_update") {
+            currentStepCount = data.step_num || currentStepCount;
+            execProgress.textContent = `${currentStepCount} / ${maxStepCount}`;
+            metricAction.textContent = data.action ? data.action.toUpperCase() : "Executing";
 
-    // Stream FPS Counter Loop
-    setInterval(() => {
-        const now = Date.now();
-        const elapsedSec = (now - lastFpsReset) / 1000.0;
-        const fps = Math.round(frameCount / elapsedSec);
-        streamFpsVal.textContent = `${fps} FPS`;
-        frameCount = 0;
-        lastFpsReset = now;
-    }, 1000);
+            if (data.page_url) pageUrlMeta.textContent = `URL: ${data.page_url}`;
 
-    // Form submission handler
-    agentForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const resParts = resolutionSelect.value.split("x");
-        activeWidth = parseInt(resParts[0], 10);
-        activeHeight = parseInt(resParts[1], 10);
-
-        const payload = {
-            url: targetUrlInput.value.trim(),
-            goal: goalInput.value.trim(),
-            max_steps: parseInt(maxStepsInput.value, 10),
-            width: activeWidth,
-            height: activeHeight,
-            mode: "hybrid"
-        };
-
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        startBtn.innerHTML = "<span>⏳ Running...</span>";
-
-        successfulSteps = 0;
-        totalStepsRecorded = 0;
-        lastStepTimestamp = Date.now();
-
-        try {
-            const apiHost = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
-            const response = await fetch(`${apiHost}/api/agent/start`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`Server returned status ${response.status}`);
+            // Update Screenshot Image
+            if (data.screenshot_base64) {
+                stagePlaceholder.style.display = "none";
+                liveScreenImg.style.display = "block";
+                liveScreenImg.src = data.screenshot_base64.startsWith("data:") ? data.screenshot_base64 : `data:image/png;base64,${data.screenshot_base64}`;
             }
 
-            const data = await response.json();
-            currentTaskId = data.task_id;
-            stepCounter = 0;
+            // Update Crosshair Pin Overlay at (x, y) coordinates relative to 1280x800 viewport
+            if (data.x !== null && data.x !== undefined && data.y !== null && data.y !== undefined) {
+                targetCrosshair.style.display = "block";
+                const posX = (data.x / 1280) * 100;
+                const posY = (data.y / 800) * 100;
+                targetCrosshair.style.left = `${posX}%`;
+                targetCrosshair.style.top = `${posY}%`;
+                coordTag.textContent = `(${data.x}, ${data.y})`;
+                metricCoords.textContent = `(${data.x}, ${data.y})`;
+            } else {
+                targetCrosshair.style.display = "none";
+                metricCoords.textContent = "N/A";
+            }
 
-            taskIdVal.textContent = currentTaskId;
-            taskStateBadge.className = "badge badge-info";
-            taskStateBadge.textContent = "Running";
-            stepsVal.textContent = `0 / ${payload.max_steps}`;
-
-            metricCoordsVal.textContent = "(0, 0)";
-            latencyVal.textContent = "0.0s";
-            successRateVal.textContent = "100%";
-
-            logFeed.innerHTML = "";
-
-        } catch (err) {
-            alert(`Error launching agent: ${err.message}`);
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            startBtn.innerHTML = "<span>▶ Launch Task</span>";
+            // Append reasoning step to feed
+            addLogItem(data);
+        } else if (data.event === "task_completed") {
+            setTaskRunningState(false, "completed");
+        } else if (data.event === "task_failed") {
+            setTaskRunningState(false, "failed");
         }
+    }
+
+    function addLogItem(data) {
+        if (feedList.querySelector(".feed-empty")) {
+            feedList.innerHTML = "";
+        }
+
+        const item = document.createElement("div");
+        item.className = `feed-item ${data.success === false ? 'failed' : ''}`;
+
+        const coordsText = (data.x !== null && data.x !== undefined) ? `Coords: (${data.x}, ${data.y})` : "";
+        const actionText = data.action ? data.action.toUpperCase() : "STEP";
+        const valText = data.text ? ` -> "${data.text}"` : "";
+
+        item.innerHTML = `
+            <div class="feed-item-head">
+                <span class="feed-step">STEP ${data.step_num}: ${actionText}${valText}</span>
+                <span class="feed-coords">${coordsText}</span>
+            </div>
+            <div class="feed-reasoning">${data.thought || data.reasoning || "Executing step."}</div>
+        `;
+
+        feedList.insertBefore(item, feedList.firstChild);
+    }
+
+    clearLogsBtn.addEventListener("click", () => {
+        feedList.innerHTML = '<div class="feed-empty">No telemetry events recorded yet.</div>';
     });
 
-    // Stop task handler
-    stopBtn.addEventListener("click", async () => {
-        if (!currentTaskId) return;
+    // --- 4. Task Launch & Stop API Calls ---
+    launchForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const goal = taskGoal.value.strip ? taskGoal.value.strip() : taskGoal.value.trim();
+        const url = taskUrl.value.trim();
+        const mode = taskMode.value;
+        const maxSteps = parseInt(taskMaxSteps.value, 10);
+        const saveAs = savePresetCheck.checked ? (presetNameInput.value.trim() || null) : null;
+
+        if (!goal || !url) return;
+
+        setTaskRunningState(true);
+        maxStepCount = maxSteps;
+        execProgress.textContent = `0 / ${maxSteps}`;
+        feedList.innerHTML = '<div class="feed-empty">Waiting for initial telemetry step...</div>';
 
         try {
-            const apiHost = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
-            await fetch(`${apiHost}/api/agent/stop/${currentTaskId}`, { method: "POST" });
-            taskStateBadge.className = "badge badge-warning";
-            taskStateBadge.textContent = "Cancelled";
+            const resp = await fetch("/api/agent/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    goal: goal,
+                    url: url,
+                    mode: mode,
+                    max_steps: maxSteps,
+                    save_as: saveAs
+                })
+            });
+
+            const resData = await resp.json();
+            if (resp.ok) {
+                activeTaskId = resData.task_id;
+                execTaskId.textContent = activeTaskId.slice(0, 8);
+            } else {
+                alert(`Error starting agent: ${resData.detail || "Unknown error"}`);
+                setTaskRunningState(false, "idle");
+            }
         } catch (err) {
-            console.error("Error stopping task:", err);
-        } finally {
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            startBtn.innerHTML = "<span>▶ Launch Task</span>";
+            console.error("Start agent error:", err);
+            alert(`Failed to start agent: ${err}`);
+            setTaskRunningState(false, "idle");
         }
     });
 
-    // Clear logs handler
-    clearLogsBtn.addEventListener("click", () => {
-        logFeed.innerHTML = '<div class="empty-feed-msg">No step telemetry events recorded yet.</div>';
+    stopBtn.addEventListener("click", async () => {
+        if (!activeTaskId) return;
+        try {
+            await fetch(`/api/agent/stop/${activeTaskId}`, { method: "POST" });
+            setTaskRunningState(false, "cancelled");
+        } catch (err) {
+            console.error("Stop agent error:", err);
+        }
     });
 
-    // Position Crosshair Target Overlay on Screenshot
-    function updateCoordinateOverlay(x, y) {
-        if (x === null || x === undefined || y === null || y === undefined) {
-            targetOverlayMarker.style.display = "none";
-            metricCoordsVal.textContent = "None";
+    function setTaskRunningState(isRunning, finalState = "running") {
+        startBtn.disabled = isRunning;
+        stopBtn.disabled = !isRunning;
+
+        execBadge.className = `badge badge-${isRunning ? 'running' : (finalState === 'completed' ? 'success' : (finalState === 'failed' ? 'failed' : 'idle'))}`;
+        execBadge.textContent = isRunning ? "Running" : finalState.toUpperCase();
+
+        if (!isRunning) {
+            targetCrosshair.style.display = "none";
+        }
+    }
+
+    // --- 5. Saved Tasks Presets API ---
+    async function loadTasks() {
+        try {
+            const resp = await fetch("/api/tasks");
+            const tasks = await resp.json();
+            renderTasksGrid(tasks);
+        } catch (err) {
+            console.error("Error loading tasks:", err);
+        }
+    }
+
+    function renderTasksGrid(tasks) {
+        tasksGrid.innerHTML = "";
+
+        if (!tasks || tasks.length === 0) {
+            tasksGrid.innerHTML = '<div class="feed-empty" style="grid-column: 1/-1;">No saved task presets found. Click "+ New Task Preset" to create one.</div>';
             return;
         }
 
-        metricCoordsVal.textContent = `(${x}, ${y})`;
-        markerLabel.textContent = `(${x}, ${y})`;
+        tasks.forEach(t => {
+            const card = document.createElement("div");
+            card.className = "task-card";
+            card.innerHTML = `
+                <div class="task-card-head">
+                    <span class="task-card-title">${t.name}</span>
+                    <span class="badge badge-info">${t.mode}</span>
+                </div>
+                <p class="task-card-goal">${t.goal}</p>
+                <div class="task-card-meta">URL: ${t.url}</div>
+                <div class="task-card-actions">
+                    <button class="btn btn-terracotta run-preset-btn" data-goal="${t.goal.replace(/"/g, '&quot;')}" data-url="${t.url}" data-mode="${t.mode}">
+                        ▶ Run Task
+                    </button>
+                    <button class="btn btn-ghost delete-preset-btn" data-name="${t.name}">🗑️</button>
+                </div>
+            `;
+            tasksGrid.appendChild(card);
+        });
 
-        const imgRect = livePreviewImg.getBoundingClientRect();
-        const containerRect = previewContainer.getBoundingClientRect();
+        // Run Preset Handlers
+        document.querySelectorAll(".run-preset-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const goal = btn.getAttribute("data-goal");
+                const url = btn.getAttribute("data-url");
+                const mode = btn.getAttribute("data-mode");
 
-        const scaleX = imgRect.width / activeWidth;
-        const scaleY = imgRect.height / activeHeight;
+                taskGoal.value = goal;
+                taskUrl.value = url;
+                taskMode.value = mode;
 
-        const imgLeftRelativeToContainer = imgRect.left - containerRect.left;
-        const imgTopRelativeToContainer = imgRect.top - containerRect.top;
+                // Switch to Live Tab and trigger form submit
+                document.querySelector('[data-tab="live"]').click();
+                launchForm.dispatchEvent(new Event("submit"));
+            });
+        });
 
-        const posX = imgLeftRelativeToContainer + (x * scaleX);
-        const posY = imgTopRelativeToContainer + (y * scaleY);
-
-        targetOverlayMarker.style.left = `${posX}px`;
-        targetOverlayMarker.style.top = `${posY}px`;
-        targetOverlayMarker.style.display = "block";
+        // Delete Preset Handlers
+        document.querySelectorAll(".delete-preset-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const name = btn.getAttribute("data-name");
+                if (confirm(`Remove task preset '${name}'?`)) {
+                    await fetch(`/api/tasks/${name}`, { method: "DELETE" });
+                    loadTasks();
+                }
+            });
+        });
     }
 
-    // Telemetry frame handler
-    function handleTelemetryFrame(frame) {
-        if (!frame) return;
+    // Modal Dialog Handlers
+    openNewTaskModalBtn.addEventListener("click", () => newTaskModal.classList.add("active"));
+    closeTaskModalBtn.addEventListener("click", () => newTaskModal.classList.remove("active"));
+    cancelModalBtn.addEventListener("click", () => newTaskModal.classList.remove("active"));
 
-        frameCount++;
-        const now = Date.now();
-        if (lastStepTimestamp) {
-            const deltaSec = ((now - lastStepTimestamp) / 1000.0).toFixed(1);
-            latencyVal.textContent = `${deltaSec}s`;
+    newTaskForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("modalTaskName").value.trim();
+        const goal = document.getElementById("modalTaskGoal").value.trim();
+        const url = document.getElementById("modalTaskUrl").value.trim();
+        const mode = document.getElementById("modalTaskMode").value;
+
+        if (!name || !goal || !url) return;
+
+        try {
+            await fetch("/api/tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, goal, url, mode })
+            });
+            newTaskModal.classList.remove("active");
+            newTaskForm.reset();
+            loadTasks();
+        } catch (err) {
+            console.error("Error creating preset:", err);
         }
-        lastStepTimestamp = now;
+    });
 
-        stepCounter = frame.step_num || (stepCounter + 1);
-        stepsVal.textContent = `${stepCounter} Steps`;
-
-        totalStepsRecorded++;
-        if (frame.success !== false) {
-            successfulSteps++;
-        }
-        const ratePct = Math.round((successfulSteps / totalStepsRecorded) * 100);
-        successRateVal.textContent = `${ratePct}%`;
-
-        if (frame.page_url) {
-            previewPageUrl.textContent = `URL: ${frame.page_url}`;
-        }
-
-        if (frame.used_vision) {
-            activeModelPill.textContent = "qwen3.6-27b";
-        } else {
-            activeModelPill.textContent = "llama-3.1-8b";
-        }
-
-        if (frame.screenshot_base64) {
-            previewPlaceholder.style.display = "none";
-            livePreviewImg.style.display = "block";
-            livePreviewImg.src = frame.screenshot_base64;
-            setTimeout(() => {
-                updateCoordinateOverlay(frame.x, frame.y);
-            }, 80);
-        }
-
-        const emptyMsg = logFeed.querySelector(".empty-feed-msg");
-        if (emptyMsg) {
-            emptyMsg.remove();
-        }
-
-        const card = document.createElement("div");
-        card.className = "log-card";
-
-        const coordsStr = (frame.x !== null && frame.x !== undefined) ? ` (${frame.x}, ${frame.y})` : "";
-        const selectorStr = frame.selector ? ` | Locator: ${frame.selector}` : "";
-
-        card.innerHTML = `
-            <div class="log-card-header">
-                <span class="log-step-title">STEP ${frame.step_num}: ${frame.action.toUpperCase()}${coordsStr}</span>
-                <span class="badge badge-vision">👁️ Pure Visual</span>
-            </div>
-            <div class="log-reasoning">💡 ${frame.thought || frame.reasoning || "Executing physical visual action..."}</div>
-            <div class="log-meta-row">
-                <span>Status: ${frame.success !== false ? "✅ Success" : "❌ Failed"}</span>
-                <span>${selectorStr}</span>
-            </div>
-        `;
-
-        logFeed.prepend(card);
-
-        if (frame.action === "done") {
-            taskStateBadge.className = "badge badge-success";
-            taskStateBadge.textContent = "Completed";
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            startBtn.innerHTML = "<span>▶ Launch Task</span>";
+    // --- 6. Run History API ---
+    async function loadHistory() {
+        try {
+            const resp = await fetch("/api/history");
+            const history = await resp.json();
+            renderHistoryList(history);
+        } catch (err) {
+            console.error("Error loading run history:", err);
         }
     }
+
+    function renderHistoryList(history) {
+        historyList.innerHTML = "";
+
+        if (!history || history.length === 0) {
+            historyList.innerHTML = '<div class="feed-empty">No past execution runs recorded yet.</div>';
+            return;
+        }
+
+        history.forEach(item => {
+            const row = document.createElement("div");
+            row.className = "history-item";
+
+            const selfAssess = item.self_assessment || {};
+            const status = (selfAssess.completion_status || (item.final_status && item.final_status.includes("Completed") ? "FULLY_MET" : "FAILED")).toUpperCase();
+            const badgeClass = status === "FULLY_MET" ? "badge-success" : (status === "PARTIALLY_MET" ? "badge-running" : "badge-failed");
+
+            row.innerHTML = `
+                <div class="history-item-info">
+                    <span class="history-item-goal">🎯 Goal: ${item.goal}</span>
+                    <span class="history-item-meta">URL: ${item.start_url} | Steps: ${item.total_steps || 0} | Mode: ${item.mode}</span>
+                </div>
+                <span class="badge ${badgeClass}">${status}</span>
+            `;
+            historyList.appendChild(row);
+        });
+    }
+
+    document.getElementById("refreshHistoryBtn").addEventListener("click", loadHistory);
+
+    // Initialize Telemetry WebSocket Connection
+    connectWebSocket();
 });

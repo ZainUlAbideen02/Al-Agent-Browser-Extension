@@ -1,11 +1,11 @@
 {
-  "task_id": "0941f4f1",
-  "goal": "type tomsmith and SuperSecretPassword! then click login",
-  "start_url": "https://the-internet.herokuapp.com/login",
+  "task_id": "bfcc223c",
+  "goal": "Click target button",
+  "start_url": "file:///C:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html",
   "mode": "visual",
-  "final_status": "Failed with crash: Failed to obtain valid response from Groq API after 4 attempts. Last error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kt4ams0yfjq92rpaknkw9mgd` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199789, Requested 5517. Please try again in 38m12.192s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+  "final_status": "Failed with crash: Failed to obtain valid response from Groq API after 4 attempts. Last error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kt4ams0yfjq92rpaknkw9mgd` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 198198, Requested 3489. Please try again in 12m8.784s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
   "total_steps": 0,
-  "session_saved": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\sessions\\the-internet.herokuapp.com.json",
+  "session_saved": null,
   "self_assessment": null,
   "history": []
 }
