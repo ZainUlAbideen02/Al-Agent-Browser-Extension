@@ -10,23 +10,35 @@ from agent.context_vault import ContextVault
 
 logger = logging.getLogger("browser_agent.agent.reasoner")
 
-class PureVisualActionDecision(BaseModel):
-    """Pydantic schema for Pure Visual Computer-Use Agent action decision."""
+class PureVisualStepDecision(BaseModel):
+    """Unified single-call step decision combining human requirement detection and visual action selection."""
     reasoning: str = Field(
         default="Analyzing visual screenshot context.",
-        description="Detailed visual analysis of the screenshot identifying target coordinates."
+        description="Visual analysis of page elements and target coordinate calculation."
+    )
+    human_required: bool = Field(
+        default=False,
+        description="True if page requires human intervention (login form, CAPTCHA challenge, 2FA prompt, payment screen)."
+    )
+    requirement_type: Optional[Literal["login", "captcha", "2fa", "payment", "other"]] = Field(
+        default=None,
+        description="Type of human intervention if human_required is True."
     )
     action: Literal["click", "type", "select", "key", "scroll", "download", "ask_human", "done"] = Field(
         ...,
-        description="The visual action to execute: click, type, select, key, scroll, download, ask_human, done."
+        description="The physical visual action to execute."
     )
-    x: Optional[int] = Field(None, description="Center X pixel coordinate at 1280x800 resolution.")
-    y: Optional[int] = Field(None, description="Center Y pixel coordinate at 1280x800 resolution.")
-    selector: Optional[str] = Field(None, description="CSS selector locator fallback if applicable.")
-    text: Optional[str] = Field(None, description="Text string to type if action is 'type'.")
-    value: Optional[str] = Field(None, description="Option value/label to choose if action is 'select'.")
-    key: Optional[str] = Field(None, description="Key name to press (e.g. 'Enter', 'Tab', 'Escape') if action is 'key'.")
-    direction: Optional[Literal["up", "down", "left", "right"]] = Field(None, description="Scroll direction if action is 'scroll'.")
+    x: Optional[int] = Field(None, description="Center X coordinate at 1280x800 resolution.")
+    y: Optional[int] = Field(None, description="Center Y coordinate at 1280x800 resolution.")
+    selector: Optional[str] = Field(None)
+    text: Optional[str] = Field(None)
+    value: Optional[str] = Field(None)
+    key: Optional[str] = Field(None)
+    direction: Optional[Literal["up", "down", "left", "right"]] = Field(None)
+
+class PureVisualActionDecision(PureVisualStepDecision):
+    """Alias for backwards compatibility."""
+    pass
 
 class ZoomedCropActionDecision(BaseModel):
     """Pydantic schema for 2x Zoomed Crop coordinate prediction."""
@@ -57,7 +69,7 @@ class GoalSelfAssessment(BaseModel):
     accomplishment_summary: str = Field(..., description="Plain text summary of what was accomplished during the run.")
     detailed_explanation: str = Field(..., description="Detailed explanation supporting the completion status.")
 
-class VisualActionDecision(PureVisualActionDecision):
+class VisualActionDecision(PureVisualStepDecision):
     """Alias for backwards compatibility."""
     thought: Optional[str] = Field(None)
 
@@ -74,34 +86,36 @@ class ActionDecision(BaseModel):
     key: Optional[str] = Field(default=None)
     reasoning: Optional[str] = Field(default="Executing next action step.")
 
-SYSTEM_PROMPT_PURE_VISUAL = """You are a pure visual computer-use agent controlling a web browser strictly via screenshots at 1280x800 resolution.
+SYSTEM_PROMPT_UNIFIED = """You are a pure visual computer-use agent controlling a web browser strictly via screenshots at 1280x800 resolution.
 
 USER PROFILE VAULT CONTEXT:
 {vault_context}
 
 CRITICAL INSTRUCTIONS:
-1. You must respond with exact pixel coordinates (x, y) based on what you see in the image at 1280x800 resolution. Do NOT reference CSS selectors, element IDs, or DOM structure — you only have visual information.
-2. An overlay grid with 100px red gridlines and coordinate labels (e.g., '100,200') is rendered on the image to help you pinpoint exact pixel coordinates.
-3. Calculate the center (X, Y) pixel coordinates strictly within 0..1279 (X) and 0..799 (Y).
-4. FORM FILLING & ACTION RULES:
-   - To fill an input field: choose action 'type', specify the field's center (x, y) pixel coordinates, and set 'text' to the value to type. Reference USER PROFILE VAULT CONTEXT for personal profile details.
-   - To click a button/link: choose action 'click' and specify (x, y) coordinates.
-   - To select a dropdown option: choose action 'select', specify (x, y) coordinates of the select box, and set 'value' to the option text.
-   - To press a key (e.g. 'Enter', 'Tab', 'Escape'): choose action 'key' and set 'key' to the key name.
-   - To scroll: choose action 'scroll' and set 'direction' to 'down' or 'up'.
-   - To download a file: choose action 'download' and specify (x, y) coordinates of the download button/link.
-   - To ask human for help: choose action 'ask_human' if uncertain, blocked, or requiring human input.
-   - To finish: choose action 'done'.
-5. Output strictly valid JSON matching the schema:
+1. Examine the screenshot for human intervention requirements first:
+   - Set 'human_required' to true if page presents an account login form, CAPTCHA puzzle, 2FA code prompt, or checkout payment screen. Set 'requirement_type' to 'login', 'captcha', '2fa', or 'payment'.
+2. If no human intervention is required, calculate center (x, y) coordinates for the next physical visual action:
+   - Overlay grid with 100px red lines & labels (e.g. '100,200') is rendered on the image to help calculate exact coordinates [0..1279 X, 0..799 Y].
+   - 'type': specify center (x, y) and 'text' value to type. Reference USER PROFILE VAULT CONTEXT.
+   - 'click': specify center (x, y).
+   - 'select': specify center (x, y) and 'value'.
+   - 'key': specify 'key' name ('Enter', 'Tab', 'Escape').
+   - 'scroll': set 'direction' ('down' / 'up').
+   - 'download': specify center (x, y) of download link/button.
+   - 'ask_human': choose if stuck or uncertain.
+   - 'done': choose when user objective is complete.
+3. Output strictly valid JSON matching schema:
 {{
-  "reasoning": "<visual analysis of target elements using grid reference numbers>",
+  "reasoning": "<visual analysis>",
+  "human_required": true | false,
+  "requirement_type": "login" | "captcha" | "2fa" | "payment" | null,
   "action": "click" | "type" | "select" | "key" | "scroll" | "download" | "ask_human" | "done",
   "x": 640 or null,
   "y": 400 or null,
-  "text": "text string if type" or null,
-  "value": "option label if select" or null,
-  "key": "Enter" | "Tab" | "Escape" or null,
-  "direction": "down" | "up" or null
+  "text": "string" or null,
+  "value": "string" or null,
+  "key": "Enter" or null,
+  "direction": "down" or null
 }}
 Do NOT output any markdown formatting or extra text outside the JSON object.
 """
@@ -197,7 +211,7 @@ Output strictly valid JSON matching this schema:
 """
 
 class ReasonerAgent(BaseAgent):
-    """LLM Reasoner agent supporting Pure Visual Computer-Use, Human Handoff Detection, Self-Assessment, and DOM reasoning."""
+    """LLM Reasoner agent supporting Pure Visual Computer-Use, Single-Call Unified Decision, Human Handoff Detection, Self-Assessment, and DOM reasoning."""
 
     def __init__(
         self,
@@ -209,95 +223,23 @@ class ReasonerAgent(BaseAgent):
         super().__init__(api_key=api_key, text_model=text_model, vision_model=vision_model)
         self.vault = vault or ContextVault()
 
-    def detect_human_required(self, visual_state: Dict[str, Any]) -> Tuple[bool, str, str]:
-        """
-        Detects if current page requires human login, CAPTCHA, 2FA, or payment intervention.
-        Returns tuple: (human_required_bool, requirement_type_str, reasoning_str).
-        """
-        screenshot_path = visual_state.get("screenshot_path")
-        if not screenshot_path or not Path(screenshot_path).exists():
-            return False, "none", "No screenshot available for human requirement check."
-
-        user_msg = f"""Current Page URL: {visual_state.get('current_url', 'N/A')}
-Current Page Title: {visual_state.get('page_title', 'N/A')}
-
-Does this page require a human to log in, solve a CAPTCHA, enter a 2FA code, or enter payment info? Answer yes/no and which type.
-Output strictly valid JSON matching schema.
-"""
-        try:
-            raw_res = self.call_llm(
-                system_prompt=SYSTEM_PROMPT_HUMAN_DETECT,
-                user_message=user_msg,
-                expect_json=True,
-                image_path=screenshot_path
-            )
-            detection = HumanRequiredDetection(**raw_res)
-            logger.info(
-                f"Human Requirement Detection: HumanRequired={detection.human_required} | "
-                f"Type={detection.requirement_type} | Reasoning: {detection.reasoning[:60]}..."
-            )
-            return detection.human_required, detection.requirement_type or "login", detection.reasoning
-        except Exception as e:
-            logger.warning(f"Human requirement detection call failed: {e}. Assuming no human action required.")
-            return False, "none", f"Detection call error: {e}"
-
-    def assess_goal_completion(
-        self,
-        goal: str,
-        history_summary: str,
-        visual_state: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Performs self-assessment of user goal completion status (fully_met, partially_met, not_met).
-        Returns dictionary with completion_status, accomplishment_summary, and detailed_explanation.
-        """
-        screenshot_path = visual_state.get("screenshot_path")
-        system_prompt = SYSTEM_PROMPT_ASSESSMENT.format(goal=goal)
-
-        user_msg = f"""User Objective Goal: "{goal}"
-Final Page URL: {visual_state.get('current_url', 'N/A')}
-Final Page Title: {visual_state.get('page_title', 'N/A')}
-
-Full Trajectory Execution History:
-{history_summary}
-
-Analyze the final visual screenshot and step history. Output strictly valid JSON matching schema:
-{{"completion_status": "fully_met"|"partially_met"|"not_met", "accomplishment_summary": "...", "detailed_explanation": "..."}}
-"""
-        try:
-            raw_res = self.call_llm(
-                system_prompt=system_prompt,
-                user_message=user_msg,
-                expect_json=True,
-                image_path=screenshot_path
-            )
-            assessment = GoalSelfAssessment(**raw_res)
-            logger.info(f"Goal Self-Assessment: Status={assessment.completion_status} | Summary: {assessment.accomplishment_summary[:80]}...")
-            return assessment.model_dump()
-        except Exception as e:
-            logger.warning(f"Goal self-assessment call failed: {e}")
-            return {
-                "completion_status": "partially_met",
-                "accomplishment_summary": f"Executed trajectory steps to address goal '{goal}'.",
-                "detailed_explanation": f"Self-assessment call failed due to API error: {e}"
-            }
-
-    def decide_visual_action(
+    def decide_visual_step(
         self,
         goal: str,
         visual_state: Dict[str, Any],
         history_summary: str
     ) -> Dict[str, Any]:
         """
-        Pure Visual Computer-Use Agent reasoning: Analyzes page screenshot and viewport metadata to decide visual action purely via pixel coordinates (x, y).
-        No CSS selectors or DOM structure used.
+        OPTIMIZED SINGLE-CALL VISUAL DECISION:
+        Combines human requirement detection (login/CAPTCHA) AND visual coordinate action selection in a SINGLE Groq API call.
+        Halves per-step LLM latency.
         """
         vw = visual_state.get("viewport_width", 1280)
         vh = visual_state.get("viewport_height", 800)
         screenshot_path = visual_state.get("screenshot_path")
         vault_context = self.vault.get_context_for_prompt()
 
-        system_prompt = SYSTEM_PROMPT_PURE_VISUAL.format(vault_context=vault_context)
+        system_prompt = SYSTEM_PROMPT_UNIFIED.format(vault_context=vault_context)
 
         user_message = f"""User Goal: "{goal}"
 
@@ -308,9 +250,9 @@ Viewport Resolution: {vw}x{vh} pixels
 Execution History (Last 5 steps):
 {history_summary}
 
-Analyze the attached screenshot carefully. You must respond with exact pixel coordinates (x, y) based on what you see in the image at 1280x800 resolution.
-Do NOT reference CSS selectors or DOM elements — you only have visual information.
-Output strictly valid JSON matching the schema.
+Analyze the attached screenshot. First check if human login/CAPTCHA/2FA is required.
+If not required, determine exact pixel coordinates (x, y) at 1280x800 resolution for the next physical visual action.
+Output strictly valid JSON matching schema.
 """
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -321,7 +263,7 @@ Output strictly valid JSON matching the schema.
                     expect_json=True,
                     image_path=screenshot_path
                 )
-                decision_obj = PureVisualActionDecision(**raw_decision)
+                decision_obj = PureVisualStepDecision(**raw_decision)
                 result = decision_obj.model_dump()
 
                 if result["action"] == "type" and result.get("text"):
@@ -330,18 +272,40 @@ Output strictly valid JSON matching the schema.
                         logger.info(f"Resolved vault field text '{result['text']}' -> '{resolved}'")
                         result["text"] = resolved
 
-                logger.info(f"Pure Visual Decision: Action={result['action']} | Coords=({result.get('x')}, {result.get('y')}) | Reasoning: {result['reasoning'][:60]}...")
+                logger.info(
+                    f"Unified Visual Step Decision: HumanReq={result.get('human_required')} | "
+                    f"Action={result['action']} | Coords=({result.get('x')}, {result.get('y')}) | "
+                    f"Reasoning: {result['reasoning'][:60]}..."
+                )
                 return result
             except ValidationError as ve:
-                logger.warning(f"Pydantic Pure Visual validation failed (attempt {attempt + 1}): {ve}")
+                logger.warning(f"Pydantic Unified Visual validation failed (attempt {attempt + 1}): {ve}")
                 if attempt == max_retries:
-                    raise RuntimeError(f"Visual action decision failed validation: {ve}") from ve
-                user_message += f"\n\n[VALIDATION ERROR: {ve}. Please output valid JSON with fields: reasoning, action, x, y, text, key, direction.]"
+                    raise RuntimeError(f"Unified visual step decision failed validation: {ve}") from ve
+                user_message += f"\n\n[VALIDATION ERROR: {ve}. Output valid JSON with fields: reasoning, human_required, action, x, y, text, key.]"
             except Exception as e:
-                logger.error(f"Error deciding pure visual action: {e}")
+                logger.error(f"Error in unified visual step decision: {e}")
                 raise
 
-        raise RuntimeError("Failed to generate valid pure visual action decision.")
+        raise RuntimeError("Failed to generate valid unified visual step decision.")
+
+    def detect_human_required(self, visual_state: Dict[str, Any]) -> Tuple[bool, str, str]:
+        """Legacy separate detection wrapper calling decide_visual_step."""
+        step_res = self.decide_visual_step(
+            goal="Check human requirement",
+            visual_state=visual_state,
+            history_summary=""
+        )
+        return step_res.get("human_required", False), step_res.get("requirement_type") or "login", step_res.get("reasoning", "")
+
+    def decide_visual_action(
+        self,
+        goal: str,
+        visual_state: Dict[str, Any],
+        history_summary: str
+    ) -> Dict[str, Any]:
+        """Legacy separate action decision wrapper calling decide_visual_step."""
+        return self.decide_visual_step(goal=goal, visual_state=visual_state, history_summary=history_summary)
 
     def decide_visual_action_zoomed(
         self,
@@ -468,6 +432,47 @@ Output strictly valid JSON matching schema: {{"success": true|false, "reasoning"
             logger.warning(f"Post-action verification call failed: {ve}. Assuming action succeeded.")
             return True, f"Verification skipped due to API error: {ve}"
 
+    def assess_goal_completion(
+        self,
+        goal: str,
+        history_summary: str,
+        visual_state: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Performs self-assessment of user goal completion status (fully_met, partially_met, not_met).
+        Returns dictionary with completion_status, accomplishment_summary, and detailed_explanation.
+        """
+        screenshot_path = visual_state.get("screenshot_path")
+        system_prompt = SYSTEM_PROMPT_ASSESSMENT.format(goal=goal)
+
+        user_msg = f"""User Objective Goal: "{goal}"
+Final Page URL: {visual_state.get('current_url', 'N/A')}
+Final Page Title: {visual_state.get('page_title', 'N/A')}
+
+Full Trajectory Execution History:
+{history_summary}
+
+Analyze the final visual screenshot and step history. Output strictly valid JSON matching schema:
+{{"completion_status": "fully_met"|"partially_met"|"not_met", "accomplishment_summary": "...", "detailed_explanation": "..."}}
+"""
+        try:
+            raw_res = self.call_llm(
+                system_prompt=system_prompt,
+                user_message=user_msg,
+                expect_json=True,
+                image_path=screenshot_path
+            )
+            assessment = GoalSelfAssessment(**raw_res)
+            logger.info(f"Goal Self-Assessment: Status={assessment.completion_status} | Summary: {assessment.accomplishment_summary[:80]}...")
+            return assessment.model_dump()
+        except Exception as e:
+            logger.warning(f"Goal self-assessment call failed: {e}. Utilizing graceful fallback assessment.")
+            return {
+                "completion_status": "unknown",
+                "accomplishment_summary": "Assessment unavailable.",
+                "detailed_explanation": f"Assessment unavailable - API returned empty response: {e}"
+            }
+
     def _format_elements(self, elements: List[Dict[str, Any]]) -> str:
         formatted = []
         for i, el in enumerate(elements, 1):
@@ -566,4 +571,4 @@ Output strictly valid JSON with keys: "action", "selector", "x", "y", "text", "v
             "page_title": page_state.get("title", ""),
             "screenshot_path": screenshot_path
         }
-        return self.decide_visual_action(goal=goal, visual_state=visual_state, history_summary=history_summary)
+        return self.decide_visual_step(goal=goal, visual_state=visual_state, history_summary=history_summary)

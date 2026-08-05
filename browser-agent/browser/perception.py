@@ -9,23 +9,18 @@ from browser.controller import BrowserController
 
 logger = logging.getLogger("browser_agent.browser.perception")
 
-def annotate_screenshot(
-    image_input: Union[str, bytes],
-    out_path: Optional[str] = None,
-    grid_step: int = 100
-) -> Tuple[str, str]:
-    """
-    Overlays a light coordinate reference grid with labels (every 100px) on the screenshot image.
-    Gives visual LLMs visual reference points for accurate pixel coordinate prediction.
-    Returns tuple of (base64_png_string, output_filepath).
-    """
-    if isinstance(image_input, (str, Path)):
-        img = Image.open(image_input).convert("RGB")
-    else:
-        img = Image.open(io.BytesIO(image_input)).convert("RGB")
+_CACHED_GRID_OVERLAY: Optional[Image.Image] = None
 
-    width, height = img.size
-    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+def get_precomputed_grid_overlay(width: int = 1280, height: int = 800, grid_step: int = 100) -> Image.Image:
+    """
+    Precomputes and caches the 100px red grounding grid overlay RGBA image.
+    Avoids re-drawing lines and text labels on every single screenshot capture step.
+    """
+    global _CACHED_GRID_OVERLAY
+    if _CACHED_GRID_OVERLAY is not None and _CACHED_GRID_OVERLAY.size == (width, height):
+        return _CACHED_GRID_OVERLAY
+
+    overlay = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
     line_color = (255, 50, 50, 100)       # Light red semi-transparent gridline
@@ -56,7 +51,25 @@ def annotate_screenshot(
             draw.rectangle([(tx - 1, ty - 1), (tx + text_w + 1, ty + text_h + 1)], fill=bg_box_color)
             draw.text((tx, ty), label_text, fill=text_color, font=font)
 
-    # Composite overlay on original image
+    _CACHED_GRID_OVERLAY = overlay
+    return _CACHED_GRID_OVERLAY
+
+def annotate_screenshot(
+    image_input: Union[str, bytes],
+    out_path: Optional[str] = None,
+    grid_step: int = 100
+) -> Tuple[str, str]:
+    """
+    Composites precomputed coordinate reference grid on screenshot image.
+    Returns tuple of (base64_png_string, output_filepath).
+    """
+    if isinstance(image_input, (str, Path)):
+        img = Image.open(image_input).convert("RGB")
+    else:
+        img = Image.open(io.BytesIO(image_input)).convert("RGB")
+
+    width, height = img.size
+    overlay = get_precomputed_grid_overlay(width=width, height=height, grid_step=grid_step)
     annotated_img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
     if out_path:
@@ -78,8 +91,7 @@ def capture_visual_state(
 ) -> Dict[str, Any]:
     """
     Captures visual page state at 1280x800.
-    If grid_overlay is True, overlays 100px reference gridlines on the screenshot image.
-    Pure Visual Perception mode: does NOT extract DOM elements or selectors.
+    If grid_overlay is True, composites cached 100px reference gridlines on screenshot.
     """
     state = controller.get_visual_state(screenshot_path=screenshot_path)
     state["screenshot_path"] = screenshot_path
@@ -92,7 +104,6 @@ def capture_visual_state(
                 grid_step=100
             )
             state["base64_image"] = annotated_b64
-            logger.info("Applied grid overlay to visual screenshot.")
         except Exception as e:
             logger.warning(f"Failed to apply grid overlay to screenshot: {e}")
 

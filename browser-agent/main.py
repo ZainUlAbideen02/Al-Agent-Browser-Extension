@@ -3,10 +3,13 @@ import sys
 import json
 import time
 import uuid
+import shutil
 import logging
 import argparse
+import traceback
 import base64
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, Optional, Callable
 
 # Add project root to python path
@@ -25,6 +28,7 @@ from browser.actions import execute_visual_action, execute_action
 from agent.reasoner import ReasonerAgent
 from agent.memory import StepMemory
 from agent.context_vault import ContextVault
+from agent.task_store import get_saved_tasks, add_task, remove_task, get_task, list_tasks
 
 # Configure logging
 logging.basicConfig(
@@ -48,8 +52,9 @@ def run_agent(
     step_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 ) -> Dict[str, Any]:
     """
-    Generalized entry point executing browser agent control loop for ANY user goal on ANY website,
-    with human-handoff for login/CAPTCHA steps, session state persistence, and self-assessment.
+    Optimized entry point executing browser agent control loop for ANY user goal on ANY website,
+    with merged single-call LLM reasoning, fast-path verification skipping, human-handoff,
+    session state persistence, top-level crash dumper, and goal self-assessment.
     """
     check_api_key()
 
@@ -89,12 +94,14 @@ def run_agent(
 
     final_status = "In progress"
     self_assessment = None
+    consecutive_high_confidence_successes = 0
 
     try:
         controller.start(headless=headless, session_file=active_session)
         controller.goto(url)
 
         for step in range(1, max_steps + 1):
+            step_start_time = time.perf_counter()
             print(f"\n--- [STEP {step}/{max_steps}] ---")
 
             screenshot_name = f"step_{step}.png"
@@ -104,19 +111,59 @@ def run_agent(
             used_vision = False
 
             if active_mode == "visual":
+                t0_percept = time.perf_counter()
                 visual_state = capture_visual_state(
                     controller,
                     screenshot_path=screenshot_path,
                     grid_overlay=grid_overlay
                 )
+                t_percept = time.perf_counter() - t0_percept
 
                 print(f"📍 Page URL: {visual_state['current_url']}")
                 print(f"📄 Page Title: {visual_state['page_title']}")
                 print(f"📸 Visual Screenshot saved: {screenshot_path}")
 
-                # --- HUMAN HANDOFF DETECTION (Login / CAPTCHA / 2FA / Payment) ---
-                human_req, req_type, req_reason = reasoner.detect_human_required(visual_state)
-                if human_req:
+                t0_llm = time.perf_counter()
+
+                # Check if zoom-retry recovery should trigger due to prior failure or loop
+                if memory.should_trigger_zoom_retry() and memory.history:
+                    last_entry = memory.history[-1]
+                    last_x = last_entry.get("x") or 640
+                    last_y = last_entry.get("y") or 400
+                    print(f"🔍 TRIGGERING 2X ZOOM-RETRY RECOVERY centered on ({last_x}, {last_y})...")
+                    try:
+                        action_decision = reasoner.decide_visual_action_zoomed(
+                            goal=goal,
+                            full_screenshot_path=screenshot_path,
+                            target_x=last_x,
+                            target_y=last_y,
+                            history_summary=history_summary
+                        )
+                        memory.record_zoom_retry_attempt()
+                        used_vision = True
+                    except Exception as ze:
+                        logger.warning(f"Zoom-retry call failed: {ze}. Falling back to unified visual decision...")
+                        action_decision = reasoner.decide_visual_step(
+                            goal=goal,
+                            visual_state=visual_state,
+                            history_summary=history_summary
+                        )
+                        used_vision = True
+                else:
+                    print("🧠 Deciding visual action & security checks in SINGLE unified Groq API call...")
+                    action_decision = reasoner.decide_visual_step(
+                        goal=goal,
+                        visual_state=visual_state,
+                        history_summary=history_summary
+                    )
+                    used_vision = True
+
+                t_llm = time.perf_counter() - t0_llm
+
+                # Handle Human Handoff Detection if flag set in unified response
+                if action_decision.get("human_required"):
+                    req_type = action_decision.get("requirement_type") or "login"
+                    req_reason = action_decision.get("reasoning", "Human intervention required.")
                     print("\n" + "⏸" * 35)
                     print(f"⏸ HUMAN ACTION NEEDED: [{req_type.upper()}] DETECTED!")
                     print(f"⏸ Reason: {req_reason}")
@@ -144,59 +191,35 @@ def run_agent(
                         grid_overlay=grid_overlay
                     )
 
-                # Check if zoom-retry recovery should trigger due to prior failure or loop
-                if memory.should_trigger_zoom_retry() and memory.history:
-                    last_entry = memory.history[-1]
-                    last_x = last_entry.get("x") or 640
-                    last_y = last_entry.get("y") or 400
-                    print(f"🔍 TRIGGERING 2X ZOOM-RETRY RECOVERY centered on ({last_x}, {last_y})...")
-                    try:
-                        action_decision = reasoner.decide_visual_action_zoomed(
-                            goal=goal,
-                            full_screenshot_path=screenshot_path,
-                            target_x=last_x,
-                            target_y=last_y,
-                            history_summary=history_summary
-                        )
-                        memory.record_zoom_retry_attempt()
-                        used_vision = True
-                    except Exception as ze:
-                        logger.warning(f"Zoom-retry call failed: {ze}. Falling back to standard visual decision...")
-                        action_decision = reasoner.decide_visual_action(
-                            goal=goal,
-                            visual_state=visual_state,
-                            history_summary=history_summary
-                        )
-                        used_vision = True
-                else:
-                    print("🧠 Deciding pure visual action via Multimodal Vision Model (qwen3.6-27b)...")
-                    action_decision = reasoner.decide_visual_action(
-                        goal=goal,
-                        visual_state=visual_state,
-                        history_summary=history_summary
-                    )
-                    used_vision = True
-
                 page_state = visual_state
 
             elif active_mode == "dom":
+                t0_percept = time.perf_counter()
                 page_state = perception.extract_state(controller.page, screenshot_path)
+                t_percept = time.perf_counter() - t0_percept
+
                 print(f"📍 Page URL: {page_state['url']}")
                 print(f"📄 Page Title: {page_state['title']}")
                 print(f"📸 Screenshot saved: {screenshot_path}")
 
+                t0_llm = time.perf_counter()
                 print("🧠 Thinking next action via DOM perception...")
                 action_decision = reasoner.decide_next_action(
                     goal=goal,
                     page_state=page_state,
                     history_summary=history_summary
                 )
+                t_llm = time.perf_counter() - t0_llm
 
             else: # hybrid mode
+                t0_percept = time.perf_counter()
                 page_state = perception.extract_state(controller.page, screenshot_path)
+                t_percept = time.perf_counter() - t0_percept
+
                 print(f"📍 Page URL: {page_state['url']}")
                 print(f"📄 Page Title: {page_state['title']}")
 
+                t0_llm = time.perf_counter()
                 trigger_vision = memory.should_trigger_vision_fallback() or memory.is_looping()
                 if trigger_vision:
                     print("👁️ Vision Fallback Triggered. Analyzing visual screenshot...")
@@ -222,6 +245,7 @@ def run_agent(
                         page_state=page_state,
                         history_summary=history_summary
                     )
+                t_llm = time.perf_counter() - t0_llm
 
             action_type = action_decision.get("action")
             selector = action_decision.get("selector")
@@ -258,11 +282,18 @@ def run_agent(
             print(f"⚡ Action Chosen: {action_type}{coords_str}{sel_str} (Text: '{action_decision.get('text')}') [Vision={used_vision}]")
 
             # Execute physical action via Playwright
+            t0_act = time.perf_counter()
             success, message, low_conf = execute_visual_action(controller, action_decision)
+            t_act = time.perf_counter() - t0_act
 
-            # Perform post-action verification for click/type actions in visual mode
-            if active_mode == "visual" and action_type in ("click", "type") and success:
-                time.sleep(0.5)
+            # FAST PATH FOR SIMPLE REPEATED ACTIONS
+            use_fast_path = (consecutive_high_confidence_successes >= 2)
+            if use_fast_path and active_mode == "visual" and action_type in ("click", "type"):
+                print("⚡ FAST PATH ACTIVE: Skipping post-action visual verification (Saved 1 LLM round-trip)!")
+                verified_ok = True
+                v_reason = "Verification skipped via Fast Path Optimization."
+            elif active_mode == "visual" and action_type in ("click", "type") and success:
+                time.sleep(0.3)
                 after_screenshot_name = f"step_{step}_after.png"
                 after_screenshot_path = str(logs_dir / after_screenshot_name)
                 controller.screenshot(after_screenshot_path)
@@ -273,19 +304,28 @@ def run_agent(
                     before_screenshot_path=screenshot_path,
                     after_screenshot_path=after_screenshot_path
                 )
+            else:
+                verified_ok = True
+                v_reason = "Verification not required for action type."
 
-                if not verified_ok:
-                    print(f"❌ Post-Action Verification FAILED: {v_reason}")
-                    success = False
-                    message = f"Post-Action Verification Failed: {v_reason}"
-                else:
-                    print(f"✅ Post-Action Verification PASSED: {v_reason}")
+            if not verified_ok:
+                print(f"❌ Post-Action Verification FAILED: {v_reason}")
+                success = False
+                message = f"Post-Action Verification Failed: {v_reason}"
+                consecutive_high_confidence_successes = 0
+            elif success and not low_conf:
+                consecutive_high_confidence_successes += 1
+            else:
+                consecutive_high_confidence_successes = 0
 
             result = {
                 "success": success,
                 "message": message,
                 "low_confidence_prediction": low_conf
             }
+
+            step_duration = time.perf_counter() - step_start_time
+            print(f"⏱️ Step {step} Latency: {step_duration:.2f}s (Percept: {t_percept:.2f}s | LLM: {t_llm:.2f}s | Action: {t_act:.2f}s)")
 
             if success:
                 print(f"📌 Action Output: SUCCESS - {message}")
@@ -338,7 +378,7 @@ def run_agent(
                 break
 
             if active_mode == "visual":
-                time.sleep(1.0)
+                time.sleep(0.5)
 
             if memory.is_visually_stuck():
                 print("\n⚠️ LOOP GUARD TRIGGERED! Agent remains visually stuck after zoom-retry attempts.")
@@ -359,9 +399,43 @@ def run_agent(
         )
 
     except Exception as e:
-        logger.error(f"Fatal error during execution loop: {e}")
-        final_status = f"Failed with exception: {e}"
-        print(f"\n❌ Execution Error: {e}")
+        crash_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        crash_dir = logs_dir / f"crash_{crash_timestamp}"
+        os.makedirs(crash_dir, exist_ok=True)
+
+        tb_str = traceback.format_exc()
+        logger.error(f"Top-level execution exception caught: {e}\n{tb_str}")
+        final_status = f"Failed with crash: {e}"
+
+        recent_screenshots = list(logs_dir.glob("step_*.png"))[-3:]
+        saved_crash_shots = []
+        for shot in recent_screenshots:
+            dest = crash_dir / shot.name
+            shutil.copy(shot, dest)
+            saved_crash_shots.append(str(dest))
+
+        crash_dump_data = {
+            "task_id": active_task_id,
+            "goal": goal,
+            "url": url,
+            "timestamp": crash_timestamp,
+            "exception": str(e),
+            "traceback": tb_str,
+            "total_steps_executed": len(memory.history),
+            "copied_screenshots": saved_crash_shots,
+            "history": memory.history
+        }
+
+        crash_file = crash_dir / "crash_dump.json"
+        with open(crash_file, "w", encoding="utf-8") as f:
+            json.dump(crash_dump_data, f, indent=2)
+
+        print("\n" + "💥" * 35)
+        print(f"💥 TOP-LEVEL AGENT CRASH CAUGHT & DUMPED TO DISK!")
+        print(f"💥 Crash Directory: {crash_dir}")
+        print(f"💥 Exception: {e}")
+        print(f"💥 Crash Dump Log: {crash_file}")
+        print("💥" * 35 + "\n")
 
     finally:
         controller.close()
@@ -382,29 +456,27 @@ def run_agent(
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
 
-    print("\n" + "=" * 70)
-    print("📊 EXECUTION SUMMARY & SELF-ASSESSMENT")
-    print(f"Status: {final_status}")
-    print(f"Total Steps Taken: {len(memory.history)}")
-    print(f"Mode: {active_mode}")
+    # --- RESULT SUMMARY NOTIFICATION BLOCK ---
+    assess_status = (self_assessment.get("completion_status") if self_assessment else "COMPLETED").upper()
+    accomplishment = (self_assessment.get("accomplishment_summary") if self_assessment else final_status)
 
-    if self_assessment:
-        print("\n" + "-" * 50)
-        print("📝 AGENT SELF-ASSESSMENT REPORT")
-        print(f"Completion Status: {self_assessment.get('completion_status', 'N/A').upper()}")
-        print(f"Accomplishment: {self_assessment.get('accomplishment_summary')}")
-        print(f"Explanation: {self_assessment.get('detailed_explanation')}")
-        print("-" * 50)
-
-    print(f"Detailed Log Exported: {summary_file}")
-    print("=" * 70 + "\n")
+    print("\n" + "🔔" * 35)
+    print(f"🔔 TASK EXECUTION RESULT SUMMARY")
+    print(f"Goal: {goal}")
+    print(f"Status: {assess_status} ({final_status})")
+    print(f"Accomplishment: {accomplishment}")
+    print("🔔" * 35 + "\n")
 
     return summary_data
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generalized Computer-Use Browser Agent CLI")
-    parser.add_argument("--goal", type=str, required=True, help="Any free-text user goal or task description")
-    parser.add_argument("--url", type=str, required=True, help="Initial target web page URL")
+    parser = argparse.ArgumentParser(description="Optimized Personal Assistant Browser Agent CLI")
+    parser.add_argument("--goal", type=str, default=None, help="Free-text user goal description")
+    parser.add_argument("--url", type=str, default=None, help="Initial target web page URL")
+    parser.add_argument("--run", type=str, default=None, help="Run a saved task preset by name from config/saved_tasks.json")
+    parser.add_argument("--list", action="store_true", default=False, help="List all saved task presets")
+    parser.add_argument("--add", type=str, default=None, help="Add a new saved task preset by name")
+    parser.add_argument("--remove", type=str, default=None, help="Remove a saved task preset by name")
     parser.add_argument("--mode", type=str, choices=["visual", "dom", "hybrid"], default="visual", help="Agent operational mode")
     parser.add_argument("--session", type=str, default=None, help="Explicit path to session storage json file")
     parser.add_argument("--max-steps", type=int, default=15, help="Maximum execution steps allowed (default: 15)")
@@ -415,12 +487,63 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # 1. Handle --list
+    if args.list:
+        tasks = list_tasks()
+        print("\n" + "=" * 70)
+        print("📋 SAVED TASK PRESETS")
+        print("=" * 70)
+        for t in tasks:
+            print(f"  • {t['name']:<15} | Goal: {t['goal']}")
+            print(f"    URL: {t['url']} | Mode: {t['mode']}")
+        print("=" * 70 + "\n")
+        sys.exit(0)
+
+    # 2. Handle --remove
+    if args.remove:
+        if remove_task(args.remove):
+            print(f"✅ Removed task preset '{args.remove}'.")
+        else:
+            print(f"❌ Task preset '{args.remove}' not found.")
+        sys.exit(0)
+
+    # 3. Handle --add
+    if args.add:
+        goal_val = args.goal or input("Enter Natural Language Goal: ").strip()
+        url_val = args.url or input("Enter Target URL: ").strip()
+        mode_val = args.mode or "visual"
+        add_task(name=args.add, goal=goal_val, url=url_val, mode=mode_val)
+        print(f"✅ Saved task preset '{args.add}' successfully!")
+        sys.exit(0)
+
+    active_goal = args.goal
+    active_url = args.url
+    active_mode = args.mode
+
+    # 4. Handle --run <task_name>
+    if args.run:
+        preset = get_task(args.run)
+        if preset:
+            active_goal = preset.get("goal")
+            active_url = preset.get("url")
+            active_mode = preset.get("mode", active_mode)
+            logger.info(f"Running saved task preset '{args.run}': Goal='{active_goal}', URL='{active_url}'")
+        else:
+            print(f"❌ Error: Task preset '{args.run}' not found.")
+            sys.exit(1)
+
+    if not active_goal or not active_url:
+        print("❌ Error: Both --goal and --url (or --run <task_name>) are required.")
+        print("💡 Use 'python run.py' for interactive menu, or 'python main.py --list' to see saved tasks.")
+        sys.exit(1)
+
     run_agent(
-        goal=args.goal,
-        url=args.url,
+        goal=active_goal,
+        url=active_url,
         max_steps=args.max_steps,
         headless=args.headless,
-        mode="dom" if args.no_vision else args.mode,
+        mode="dom" if args.no_vision else active_mode,
         session_file=args.session,
         grid_overlay=not args.no_grid
     )

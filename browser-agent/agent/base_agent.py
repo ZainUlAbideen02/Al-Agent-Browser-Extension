@@ -12,7 +12,7 @@ from config.settings import GROQ_API_KEY, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MOD
 logger = logging.getLogger("browser_agent.agent.base")
 
 class BaseAgent:
-    """Base LLM wrapper managing Groq API calls with vision support and JSON retry logic."""
+    """Base LLM wrapper managing Groq API calls with vision support, empty response logging, and JSON retry logic."""
 
     def __init__(self, api_key: Optional[str] = None, text_model: Optional[str] = None, vision_model: Optional[str] = None):
         self.api_key = api_key or GROQ_API_KEY
@@ -26,11 +26,28 @@ class BaseAgent:
 
     def _clean_json_text(self, text: str) -> str:
         """Extract raw JSON text, removing markdown code blocks if present."""
+        if not text:
+            return ""
         text = text.strip()
         match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         return text
+
+    def _log_debug_api_response(self, response: Any, error_msg: str) -> None:
+        """Log raw API response object details to logs/api_debug.log when empty/error responses occur."""
+        try:
+            debug_path = Path(__file__).resolve().parent.parent / "logs" / "api_debug.log"
+            debug_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"\n--- API DEBUG [{time.strftime('%Y-%m-%d %H:%M:%S')}] ---\n")
+                f.write(f"Error Context: {error_msg}\n")
+                if hasattr(response, "model_dump_json"):
+                    f.write(f"Response Object: {response.model_dump_json(indent=2)}\n")
+                else:
+                    f.write(f"Response Object: {str(response)}\n")
+        except Exception as log_err:
+            logger.warning(f"Could not write to api_debug.log: {log_err}")
 
     def call_llm(
         self,
@@ -42,7 +59,7 @@ class BaseAgent:
     ) -> Union[str, Dict[str, Any]]:
         """
         Call Groq API with system/user prompt, optional base64 image payload, and JSON retry logic.
-        Includes rate limit exponential backoff replenishment.
+        Includes rate limit exponential backoff replenishment and empty-content safeguards.
         """
         is_vision = False
         encoded_image = None
@@ -64,7 +81,7 @@ class BaseAgent:
                 current_user_msg = user_message
                 if attempt > 0 and expect_json:
                     current_user_msg += (
-                        f"\n\n[ATTENTION: Previous response failed to parse as valid JSON. "
+                        f"\n\n[ATTENTION: Previous response failed. "
                         f"Error: {last_error}. Please output ONLY raw valid JSON matching the schema.]"
                     )
 
@@ -98,15 +115,25 @@ class BaseAgent:
 
                 response = self.client.chat.completions.create(**kwargs)
 
-                if not response.choices or not response.choices[0].message.content:
-                    raise ValueError("Received empty response from Groq API.")
+                if not response or not response.choices:
+                    self._log_debug_api_response(response, "No choices returned in API response")
+                    raise ValueError("Groq API returned empty response with no choices.")
 
-                response_text = response.choices[0].message.content.strip()
+                raw_msg_content = response.choices[0].message.content
+                if raw_msg_content is None or not str(raw_msg_content).strip():
+                    self._log_debug_api_response(response, f"Empty/whitespace content returned. finish_reason={response.choices[0].finish_reason}")
+                    raise ValueError(f"Groq API returned empty response content (finish_reason={response.choices[0].finish_reason}).")
+
+                response_text = str(raw_msg_content).strip()
 
                 if not expect_json:
                     return response_text
 
                 cleaned_text = self._clean_json_text(response_text)
+                if not cleaned_text:
+                    self._log_debug_api_response(response, "Cleaned JSON text is empty")
+                    raise ValueError("Cleaned response text is empty.")
+
                 parsed_json = json.loads(cleaned_text)
 
                 if not isinstance(parsed_json, dict):

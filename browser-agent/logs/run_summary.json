@@ -1,74 +1,11 @@
 {
-  "task_id": "99a36d42-5434-4119-8ec0-c6a70b6558fe",
-  "goal": "Test goal launch",
+  "task_id": "e94bf10b-6c9b-436b-b3d7-ee43727efd53",
+  "goal": "Test goal cancellation",
   "start_url": "https://the-internet.herokuapp.com/login",
-  "mode": "dom",
-  "final_status": "Reached maximum steps limit (2).",
-  "total_steps": 2,
-  "session_saved": null,
-  "self_assessment": {
-    "completion_status": "partially_met",
-    "accomplishment_summary": "The agent successfully navigated to the login page and entered the username and password, but did not click the login button to complete the action.",
-    "detailed_explanation": "The execution history indicates that the agent successfully typed 'tomsmith' into the username field and a masked password into the password field. The final screenshot confirms that both input fields are populated with the correct values. However, the agent stopped after entering the password and did not click the 'Login' button. Consequently, the login process was not completed, and the user remains on the login page rather than being redirected to the secure area."
-  },
-  "history": [
-    {
-      "step_num": 1,
-      "action_taken": {
-        "action": "type",
-        "selector": "#username",
-        "x": null,
-        "y": null,
-        "text": "tomsmith",
-        "value": null,
-        "key": null,
-        "reasoning": "Enter username to proceed with login"
-      },
-      "action_type": "type",
-      "selector": "#username",
-      "x": null,
-      "y": null,
-      "text": "tomsmith",
-      "reasoning": "Enter username to proceed with login",
-      "result": {
-        "success": true,
-        "message": "Typed 'tomsmith' into selector '#username'",
-        "low_confidence_prediction": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_1.png",
-      "used_vision_fallback": false,
-      "low_confidence_prediction": false,
-      "page_url": "https://the-internet.herokuapp.com/login",
-      "page_title": "The Internet"
-    },
-    {
-      "step_num": 2,
-      "action_taken": {
-        "action": "type",
-        "selector": "#password",
-        "x": null,
-        "y": null,
-        "text": "******",
-        "value": null,
-        "key": null,
-        "reasoning": "Fill in the password field to proceed with the login process"
-      },
-      "action_type": "type",
-      "selector": "#password",
-      "x": null,
-      "y": null,
-      "text": "******",
-      "reasoning": "Fill in the password field to proceed with the login process",
-      "result": {
-        "success": true,
-        "message": "Typed '******' into selector '#password'",
-        "low_confidence_prediction": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_2.png",
-      "used_vision_fallback": false,
-      "low_confidence_prediction": false,
-      "page_url": "https://the-internet.herokuapp.com/login",
-      "page_title": "The Internet"
-    }
-  ]
+  "mode": "visual",
+  "final_status": "Failed with crash: Failed to obtain valid response from Groq API after 4 attempts. Last error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kt4ams0yfjq92rpaknkw9mgd` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199923, Requested 4809. Please try again in 34m4.224s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+  "total_steps": 0,
+  "session_saved": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\sessions\\the-internet.herokuapp.com.json",
+  "self_assessment": null,
+  "history": []
 }
