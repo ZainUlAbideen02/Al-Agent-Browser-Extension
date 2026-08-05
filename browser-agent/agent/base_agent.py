@@ -42,7 +42,7 @@ class BaseAgent:
     ) -> Union[str, Dict[str, Any]]:
         """
         Call Groq API with system/user prompt, optional base64 image payload, and JSON retry logic.
-        Includes model fallback logic for vision rate limits.
+        Includes rate limit exponential backoff replenishment.
         """
         is_vision = False
         encoded_image = None
@@ -118,13 +118,10 @@ class BaseAgent:
                 last_error = str(e)
                 logger.warning(f"Groq API call attempt {attempt + 1} failed: {e}")
 
-                if is_vision and "qwen" in model_name.lower() and ("Rate limit" in last_error or "429" in last_error):
-                    logger.info("Switching vision model fallback to llama-3.2-11b-vision-preview...")
-                    model_name = "llama-3.2-11b-vision-preview"
-
                 if "429" in last_error or "Rate limit" in last_error or "tokens" in last_error:
-                    logger.info("Groq API rate limit hit (429). Sleeping 5 seconds for rate limit bucket replenishment...")
-                    time.sleep(5.0)
+                    backoff_time = 6.0 * (attempt + 1)
+                    logger.info(f"Groq API rate limit hit (429). Sleeping {backoff_time}s for rate limit bucket replenishment...")
+                    time.sleep(backoff_time)
 
                 if attempt == max_retries:
                     raise RuntimeError(

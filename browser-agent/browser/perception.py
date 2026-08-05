@@ -1,11 +1,104 @@
 import os
+import io
+import base64
 import logging
-from typing import Dict, Any, List
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple, Union
+from PIL import Image, ImageDraw, ImageFont
 from browser.controller import BrowserController
 
 logger = logging.getLogger("browser_agent.browser.perception")
 
-# JavaScript snippet to extract interactive elements with robust selectors and select options
+def annotate_screenshot(
+    image_input: Union[str, bytes],
+    out_path: Optional[str] = None,
+    grid_step: int = 100
+) -> Tuple[str, str]:
+    """
+    Overlays a light coordinate reference grid with labels (every 100px) on the screenshot image.
+    Gives visual LLMs visual reference points for accurate pixel coordinate prediction.
+    Returns tuple of (base64_png_string, output_filepath).
+    """
+    if isinstance(image_input, (str, Path)):
+        img = Image.open(image_input).convert("RGB")
+    else:
+        img = Image.open(io.BytesIO(image_input)).convert("RGB")
+
+    width, height = img.size
+    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    line_color = (255, 50, 50, 100)       # Light red semi-transparent gridline
+    text_color = (255, 255, 255, 240)    # White coordinate text
+    bg_box_color = (15, 23, 42, 180)     # Dark slate semi-transparent text background pill
+
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
+
+    # Draw vertical grid lines
+    for x in range(0, width, grid_step):
+        draw.line([(x, 0), (x, height)], fill=line_color, width=1)
+
+    # Draw horizontal grid lines
+    for y in range(0, height, grid_step):
+        draw.line([(0, y), (width, y)], fill=line_color, width=1)
+
+    # Draw intersection coordinate labels (e.g. "100,200")
+    for x in range(0, width, grid_step):
+        for y in range(0, height, grid_step):
+            label_text = f"{x},{y}"
+            tx = x + 3
+            ty = y + 3
+            text_w = len(label_text) * 6
+            text_h = 10
+            draw.rectangle([(tx - 1, ty - 1), (tx + text_w + 1, ty + text_h + 1)], fill=bg_box_color)
+            draw.text((tx, ty), label_text, fill=text_color, font=font)
+
+    # Composite overlay on original image
+    annotated_img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+
+    if out_path:
+        out_p = Path(out_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        annotated_img.save(out_p, format="PNG")
+        logger.info(f"Saved annotated grid screenshot to {out_path}")
+
+    buf = io.BytesIO()
+    annotated_img.save(buf, format="PNG")
+    b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return b64_str, out_path or ""
+
+def capture_visual_state(
+    controller: BrowserController,
+    screenshot_path: Optional[str] = None,
+    grid_overlay: bool = True
+) -> Dict[str, Any]:
+    """
+    Captures visual page state at 1280x800.
+    If grid_overlay is True, overlays 100px reference gridlines on the screenshot image.
+    Pure Visual Perception mode: does NOT extract DOM elements or selectors.
+    """
+    state = controller.get_visual_state(screenshot_path=screenshot_path)
+    state["screenshot_path"] = screenshot_path
+
+    if grid_overlay and screenshot_path and Path(screenshot_path).exists():
+        try:
+            annotated_b64, _ = annotate_screenshot(
+                image_input=screenshot_path,
+                out_path=screenshot_path,
+                grid_step=100
+            )
+            state["base64_image"] = annotated_b64
+            logger.info("Applied grid overlay to visual screenshot.")
+        except Exception as e:
+            logger.warning(f"Failed to apply grid overlay to screenshot: {e}")
+
+    return state
+
+# JavaScript snippet to extract interactive elements for legacy DOM / Hybrid mode
 EXTRACTION_JS = r"""
 () => {
     const interactiveSelectors = [
@@ -39,7 +132,6 @@ EXTRACTION_JS = r"""
 
         const tag = el.tagName.toLowerCase();
         
-        // Use text locators if available for links and buttons
         const text = (el.innerText || el.textContent || '').trim();
         if (text && text.length <= 40 && (tag === 'a' || tag === 'button')) {
             const cleanText = text.replace(/"/g, '\\"').replace(/\n/g, ' ');
@@ -56,7 +148,6 @@ EXTRACTION_JS = r"""
             return `${tag}[role="${el.getAttribute('role')}"]`;
         }
 
-        // Fallback: nth-of-type relative to parent
         const parent = el.parentElement;
         if (parent) {
             const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
@@ -96,7 +187,7 @@ EXTRACTION_JS = r"""
             options: options
         });
 
-        if (results.length >= 30) break; // Limit to 30 elements for token efficiency
+        if (results.length >= 30) break;
     }
 
     return results;

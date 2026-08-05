@@ -1,437 +1,66 @@
 {
-  "task_id": "a887cad5",
-  "goal": "Click the canvas button visually labeled 'CLICK ME TO WIN - TARGET'",
-  "start_url": "file:///c:/Users/zain/OneDrive/Desktop/Al Agent Browser Extension/browser-agent/tests/canvas_test.html",
-  "mode": "hybrid",
-  "final_status": "Reached maximum steps limit (15).",
-  "total_steps": 15,
-  "pure_dom_steps": 14,
-  "vision_fallback_steps": 1,
-  "vision_fallback_ratio": 0.07,
+  "task_id": "7a322924-4333-4180-b1b5-8cc29ef6c29d",
+  "goal": "Test goal launch",
+  "start_url": "https://the-internet.herokuapp.com/login",
+  "mode": "dom",
+  "final_status": "Reached maximum steps limit (2).",
+  "total_steps": 2,
   "history": [
     {
       "step_num": 1,
       "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
+        "action": "type",
+        "selector": "#username",
         "x": null,
         "y": null,
-        "text": null,
+        "text": "tomsmith",
         "value": null,
-        "reasoning": "Click the target button as per the current goal"
+        "reasoning": "Enter username to proceed with login"
       },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
+      "action_type": "type",
+      "selector": "#username",
       "x": null,
       "y": null,
-      "text": null,
-      "reasoning": "Click the target button as per the current goal",
+      "text": "tomsmith",
+      "reasoning": "Enter username to proceed with login",
       "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
+        "success": true,
+        "message": "Typed 'tomsmith' into selector '#username'",
+        "low_confidence_prediction": false
       },
       "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_1.png",
       "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
+      "low_confidence_prediction": false,
+      "page_url": "https://the-internet.herokuapp.com/login",
+      "page_title": "The Internet"
     },
     {
       "step_num": 2,
       "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
+        "action": "type",
+        "selector": "#password",
         "x": null,
         "y": null,
-        "text": null,
+        "text": "******",
         "value": null,
-        "reasoning": "Try clicking the target button again, this time with a longer timeout"
+        "reasoning": "Enter password to proceed with login"
       },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
+      "action_type": "type",
+      "selector": "#password",
       "x": null,
       "y": null,
-      "text": null,
-      "reasoning": "Try clicking the target button again, this time with a longer timeout",
+      "text": "******",
+      "reasoning": "Enter password to proceed with login",
       "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
+        "success": true,
+        "message": "Typed '******' into selector '#password'",
+        "low_confidence_prediction": false
       },
       "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_2.png",
       "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 3,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the target button again, possibly due to a temporary issue with the previous attempts"
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the target button again, possibly due to a temporary issue with the previous attempts",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_3.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 4,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the target button again, increasing the timeout to allow for a successful click."
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the target button again, increasing the timeout to allow for a successful click.",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_4.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 5,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the button again with a different approach to avoid timeout"
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the button again with a different approach to avoid timeout",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_5.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 6,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the button again, possibly due to a temporary issue with the previous attempts."
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the button again, possibly due to a temporary issue with the previous attempts.",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_6.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 7,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the button again, possibly due to a brief delay or animation"
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the button again, possibly due to a brief delay or animation",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_7.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 8,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the target button again, possibly due to a temporary issue with the previous attempts."
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the target button again, possibly due to a temporary issue with the previous attempts.",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_8.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 9,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the button again, possibly due to a temporary issue with the previous attempts"
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the button again, possibly due to a temporary issue with the previous attempts",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_9.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 10,
-      "action_taken": {
-        "thought": "The goal is to click the green button labeled 'CLICK ME TO WIN - TARGET'. Previous attempts using DOM selectors failed, likely because the button is rendered within a canvas element. I need to click the button using its visual coordinates. The button is horizontally centered and located below the red 'WRONG TARGET' button. Estimating its center position to be around x=640 and y=210.",
-        "action": "click",
-        "x": 640,
-        "y": 210,
-        "text": null,
-        "direction": null,
-        "start_x": null,
-        "start_y": null,
-        "end_x": null,
-        "end_y": null,
-        "reasoning": "The goal is to click the green button labeled 'CLICK ME TO WIN - TARGET'. Previous attempts using DOM selectors failed, likely because the button is rendered within a canvas element. I need to click the button using its visual coordinates. The button is horizontally centered and located below the red 'WRONG TARGET' button. Estimating its center position to be around x=640 and y=210."
-      },
-      "action_type": "click",
-      "selector": null,
-      "x": 640,
-      "y": 210,
-      "text": null,
-      "reasoning": "The goal is to click the green button labeled 'CLICK ME TO WIN - TARGET'. Previous attempts using DOM selectors failed, likely because the button is rendered within a canvas element. I need to click the button using its visual coordinates. The button is horizontally centered and located below the red 'WRONG TARGET' button. Estimating its center position to be around x=640 and y=210.",
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Clicked at (640, 210)",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_10.png",
-      "used_vision_fallback": true,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Canvas UI Test Page"
-    },
-    {
-      "step_num": 11,
-      "action_taken": {
-        "action": "click",
-        "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try clicking the target button again"
-      },
-      "action_type": "click",
-      "selector": "button:has-text('CLICK ME TO WIN - TARGET')",
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try clicking the target button again",
-      "result": {
-        "success": false,
-        "error_type": "execution_error",
-        "message": "Action 'click' timed out.",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_11.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Task Failed - Wrong Canvas Clicked"
-    },
-    {
-      "step_num": 12,
-      "action_taken": {
-        "action": "click_coordinate",
-        "selector": null,
-        "x": 640,
-        "y": 210,
-        "text": null,
-        "value": null,
-        "reasoning": "Previous click actions timed out, using vision-based click at coordinates (640, 210)"
-      },
-      "action_type": "click_coordinate",
-      "selector": null,
-      "x": 640,
-      "y": 210,
-      "text": null,
-      "reasoning": "Previous click actions timed out, using vision-based click at coordinates (640, 210)",
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Clicked at (640, 210)",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_12.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Task Failed - Wrong Canvas Clicked"
-    },
-    {
-      "step_num": 13,
-      "action_taken": {
-        "action": "click_coordinate",
-        "selector": null,
-        "x": 640,
-        "y": 210,
-        "text": null,
-        "value": null,
-        "reasoning": "Previous click actions timed out, using click_coordinate action to ensure accurate target"
-      },
-      "action_type": "click_coordinate",
-      "selector": null,
-      "x": 640,
-      "y": 210,
-      "text": null,
-      "reasoning": "Previous click actions timed out, using click_coordinate action to ensure accurate target",
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Clicked at (640, 210)",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_13.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Task Failed - Wrong Canvas Clicked"
-    },
-    {
-      "step_num": 14,
-      "action_taken": {
-        "action": "click_coordinate",
-        "selector": null,
-        "x": 640,
-        "y": 210,
-        "text": null,
-        "value": null,
-        "reasoning": "Previous attempts to click the button timed out, so we will try clicking at the same coordinates again."
-      },
-      "action_type": "click_coordinate",
-      "selector": null,
-      "x": 640,
-      "y": 210,
-      "text": null,
-      "reasoning": "Previous attempts to click the button timed out, so we will try clicking at the same coordinates again.",
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Clicked at (640, 210)",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_14.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Task Failed - Wrong Canvas Clicked"
-    },
-    {
-      "step_num": 15,
-      "action_taken": {
-        "action": "scroll",
-        "selector": null,
-        "x": null,
-        "y": null,
-        "text": null,
-        "value": null,
-        "reasoning": "Try scrolling to see if the target button becomes visible or interactive"
-      },
-      "action_type": "scroll",
-      "selector": null,
-      "x": null,
-      "y": null,
-      "text": null,
-      "reasoning": "Try scrolling to see if the target button becomes visible or interactive",
-      "result": {
-        "success": true,
-        "error_type": null,
-        "message": "Scrolled down by 500px",
-        "stale_element": false
-      },
-      "screenshot_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\logs\\step_15.png",
-      "used_vision_fallback": false,
-      "page_url": "file:///C:/Users/zain/OneDrive/Desktop/Al%20Agent%20Browser%20Extension/browser-agent/tests/canvas_test.html",
-      "page_title": "Task Failed - Wrong Canvas Clicked"
+      "low_confidence_prediction": false,
+      "page_url": "https://the-internet.herokuapp.com/login",
+      "page_title": "The Internet"
     }
   ]
 }

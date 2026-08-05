@@ -7,13 +7,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const maxStepsInput = document.getElementById("maxSteps");
     const startBtn = document.getElementById("startBtn");
 
+    const streamContainer = document.getElementById("streamContainer");
     const placeholderText = document.getElementById("placeholderText");
     const streamImg = document.getElementById("streamImg");
+    const targetOverlayMarker = document.getElementById("targetOverlayMarker");
+    const markerLabel = document.getElementById("markerLabel");
     const logContainer = document.getElementById("logContainer");
 
     let ws = null;
+    let activeWidth = 1280;
+    let activeHeight = 800;
 
-    // Auto-detect current active tab URL in Chrome
+    // Auto-detect current active tab URL in Chrome Extension environment
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs && tabs[0] && tabs[0].url) {
@@ -54,8 +59,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     startBtn.addEventListener("click", async () => {
         const resParts = resolutionSelect.value.split("x");
-        const w = parseInt(resParts[0], 10);
-        const h = parseInt(resParts[1], 10);
+        activeWidth = parseInt(resParts[0], 10);
+        activeHeight = parseInt(resParts[1], 10);
 
         const targetUrl = targetUrlInput.value.trim() || "https://the-internet.herokuapp.com/login";
 
@@ -63,8 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
             url: targetUrl,
             goal: goalInput.value.trim(),
             max_steps: parseInt(maxStepsInput.value, 10),
-            width: w,
-            height: h,
+            width: activeWidth,
+            height: activeHeight,
             mode: "hybrid"
         };
 
@@ -88,6 +93,31 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    function updateCoordinateOverlay(x, y) {
+        if (x === null || x === undefined || y === null || y === undefined) {
+            targetOverlayMarker.style.display = "none";
+            return;
+        }
+
+        markerLabel.textContent = `(${x}, ${y})`;
+
+        const imgRect = streamImg.getBoundingClientRect();
+        const containerRect = streamContainer.getBoundingClientRect();
+
+        const scaleX = imgRect.width / activeWidth;
+        const scaleY = imgRect.height / activeHeight;
+
+        const imgLeftRelativeToContainer = imgRect.left - containerRect.left;
+        const imgTopRelativeToContainer = imgRect.top - containerRect.top;
+
+        const posX = imgLeftRelativeToContainer + (x * scaleX);
+        const posY = imgTopRelativeToContainer + (y * scaleY);
+
+        targetOverlayMarker.style.left = `${posX}px`;
+        targetOverlayMarker.style.top = `${posY}px`;
+        targetOverlayMarker.style.display = "block";
+    }
+
     function renderFrame(frame) {
         if (!frame) return;
 
@@ -95,6 +125,9 @@ document.addEventListener("DOMContentLoaded", () => {
             placeholderText.style.display = "none";
             streamImg.style.display = "block";
             streamImg.src = frame.screenshot_base64;
+            setTimeout(() => {
+                updateCoordinateOverlay(frame.x, frame.y);
+            }, 80);
         }
 
         if (logContainer.querySelector("div[style*='text-align:center']")) {

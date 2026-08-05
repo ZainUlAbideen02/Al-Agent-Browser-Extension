@@ -1,0 +1,23 @@
+{
+  "full_name": "John Alexander Doe",
+  "legal_name": "John Alexander Doe",
+  "first_name": "John",
+  "last_name": "Doe",
+  "roll_number": "STU-2026-8891",
+  "student_roll_number": "STU-2026-8891",
+  "email": "john.doe@example.com",
+  "program": "Computer Science",
+  "degree": "Bachelor of Science in Computer Science",
+  "university": "Stanford University",
+  "username": "tomsmith",
+  "password": "SuperSecretPassword!",
+  "employee_id": "EMP-9042",
+  "phone": "+1-555-0199",
+  "address": "123 Innovation Way, Tech Suite 400, San Francisco, CA 94105",
+  "city": "San Francisco",
+  "state": "CA",
+  "zip_code": "94105",
+  "country": "United States",
+  "document_path": "C:\\Users\\zain\\OneDrive\\Desktop\\Al Agent Browser Extension\\browser-agent\\tests\\sample_doc.pdf",
+  "student_id": "STU-9999"
+}

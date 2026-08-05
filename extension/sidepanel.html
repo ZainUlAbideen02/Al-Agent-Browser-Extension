@@ -109,7 +109,7 @@
 
         .stream-container {
             width: 100%;
-            height: 180px;
+            height: 200px;
             background: #000;
             border-radius: 6px;
             display: flex;
@@ -124,6 +124,64 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+        }
+
+        /* Pulsing Crosshair Target Overlay */
+        .target-marker {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .crosshair-h {
+            position: absolute;
+            width: 24px;
+            height: 2px;
+            background: #ef4444;
+            left: -12px;
+            top: -1px;
+            box-shadow: 0 0 6px #ef4444;
+        }
+
+        .crosshair-v {
+            position: absolute;
+            width: 2px;
+            height: 24px;
+            background: #ef4444;
+            left: -1px;
+            top: -12px;
+            box-shadow: 0 0 6px #ef4444;
+        }
+
+        .marker-pulse {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ef4444;
+            border-radius: 50%;
+            position: absolute;
+            left: -10px;
+            top: -10px;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        .marker-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.9);
+            color: #38bdf8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            border: 1px solid #38bdf8;
+            white-space: nowrap;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.6); opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
         }
 
         .log-container {
@@ -190,12 +248,20 @@
 
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label>Live Stream</label>
+            <label>Live Stream & Crosshair Overlay</label>
             <span class="badge badge-vision">👁️ Visual Agent Active</span>
         </div>
-        <div class="stream-container">
+        <div class="stream-container" id="streamContainer">
             <span id="placeholderText" style="color:var(--text-secondary); font-size:11px;">Waiting for stream...</span>
             <img id="streamImg" class="stream-img" style="display:none;" alt="Live View">
+
+            <!-- Pulsing Crosshair Target Marker Overlay -->
+            <div id="targetOverlayMarker" class="target-marker" style="display: none;">
+                <div class="crosshair-h"></div>
+                <div class="crosshair-v"></div>
+                <div class="marker-pulse"></div>
+                <div class="marker-label" id="markerLabel">(0, 0)</div>
+            </div>
         </div>
     </div>
 
