@@ -173,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chrome.storage.local.get(["user_vault"], (res) => {
             const vault = res.user_vault || {};
             groqApiKeyInput.value = vault.groq_api_key || "";
-            groqModelInput.value = vault.groq_vision_model || "qwen/qwen3.6-27b";
+            groqModelInput.value = vault.groq_model || "llama-3.3-70b-versatile";
 
             for (const key of vaultFieldIds) {
                 const el = document.getElementById(`v_${key}`);
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const updated = {
                 ...existing,
                 groq_api_key: groqApiKeyInput.value.trim(),
-                groq_vision_model: groqModelInput.value.trim() || "qwen/qwen3.6-27b"
+                groq_model: groqModelInput.value.trim() || "llama-3.3-70b-versatile"
             };
 
             for (const key of vaultFieldIds) {

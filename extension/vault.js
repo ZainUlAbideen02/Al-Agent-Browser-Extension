@@ -20,7 +20,7 @@ export const DEFAULT_VAULT = {
   student_id: "STU-9999",
   employee_id: "EMP-9042",
   groq_api_key: "",
-  groq_vision_model: "qwen/qwen3.6-27b"
+  groq_model: "llama-3.3-70b-versatile"
 };
 
 export const FIELD_ALIAS_MAP = {

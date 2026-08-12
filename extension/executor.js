@@ -1,4 +1,103 @@
-// extension/executor.js - DOM Action Executor via chrome.scripting
+// extension/executor.js - DOM Form Inspector & Action Executor via chrome.scripting
+
+export async function extractFormInputs(tabId) {
+  if (!tabId) return [];
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: () => {
+      const elements = Array.from(document.querySelectorAll("input, select, textarea"));
+      return elements.map((el, index) => {
+        const type = (el.type || el.tagName).toLowerCase();
+        if (type === "hidden" || type === "submit" || type === "button" || type === "reset") {
+          return null;
+        }
+        let labelText = "";
+        if (el.labels && el.labels.length > 0) {
+          labelText = el.labels[0].innerText || el.labels[0].textContent || "";
+        }
+        if (!labelText) {
+          const parentLabel = el.closest("label");
+          if (parentLabel) labelText = parentLabel.innerText || parentLabel.textContent || "";
+        }
+        if (!labelText) {
+          labelText = el.getAttribute("aria-label") || el.getAttribute("aria-placeholder") || "";
+        }
+
+        return {
+          index,
+          tag: el.tagName.toLowerCase(),
+          type: type,
+          name: el.name || "",
+          id: el.id || "",
+          placeholder: el.placeholder || "",
+          label: labelText.trim(),
+          value: el.value || ""
+        };
+      }).filter(Boolean);
+    }
+  });
+
+  return results?.[0]?.result || [];
+}
+
+export async function fillFormBatch(tabId, fills, submit = false) {
+  if (!tabId || !Array.isArray(fills)) return { count: 0, message: "No fills provided" };
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: (fillsArray, shouldSubmit) => {
+      const elements = Array.from(document.querySelectorAll("input, select, textarea"));
+      let filledCount = 0;
+
+      for (const item of fillsArray) {
+        if (!item || item.index === undefined || item.index === null) continue;
+        const el = elements[item.index];
+        if (!el) continue;
+
+        const val = item.value !== undefined && item.value !== null ? String(item.value) : "";
+        if (!val) continue;
+
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (typeof el.focus === "function") el.focus();
+
+        if (el.tagName.toLowerCase() === "select") {
+          let matched = false;
+          for (const opt of Array.from(el.options)) {
+            if (opt.text.toLowerCase().includes(val.toLowerCase()) || opt.value.toLowerCase().includes(val.toLowerCase())) {
+              el.value = opt.value;
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) el.value = val;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        } else {
+          el.value = "";
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.value = val;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        filledCount++;
+      }
+
+      if (shouldSubmit) {
+        const submitBtn = document.querySelector("button[type='submit'], input[type='submit']") || elements.find(e => e.type === "submit");
+        if (submitBtn) {
+          submitBtn.click();
+        } else {
+          const form = document.querySelector("form");
+          if (form) form.submit();
+        }
+      }
+
+      return { count: filledCount, submitted: shouldSubmit };
+    },
+    args: [fills, submit]
+  });
+
+  return results?.[0]?.result || { count: 0, submitted: false };
+}
 
 export async function executeTabAction(tabId, actionData) {
   if (!tabId) throw new Error("No active tabId provided for action execution.");
@@ -72,7 +171,7 @@ function inContentExecutor(actionData) {
       const { cx, cy } = scaleCoords(x, y);
       const targetEl = document.elementFromPoint(cx, cy) || document.body;
       simulateClick(targetEl, cx, cy);
-      return { success: true, message: `Clicked at (${x}, ${y}) [Scaled: ${cx}, ${cy}]` };
+      return { success: true, message: `Clicked at (${x}, ${y})` };
     }
 
     if (actionType === "type") {
@@ -83,31 +182,12 @@ function inContentExecutor(actionData) {
         const targetEl = document.elementFromPoint(cx, cy) || document.activeElement;
         simulateClick(targetEl, cx, cy);
         typeIntoElement(targetEl, strText);
-        return { success: true, message: `Typed '${strText}' at (${x}, ${y})` };
+        return { success: true, message: `Typed '${strText}'` };
       } else {
         const active = document.activeElement || document.body;
         typeIntoElement(active, strText);
-        return { success: true, message: `Typed '${strText}' into active element` };
+        return { success: true, message: `Typed '${strText}'` };
       }
-    }
-
-    if (actionType === "batch_type") {
-      const inputs = actionData.batch_inputs || [];
-      let count = 0;
-      for (const item of inputs) {
-        if (!item) continue;
-        const itemText = item.text || item.value || "";
-        if (item.x !== undefined && item.y !== undefined) {
-          const { cx, cy } = scaleCoords(item.x, item.y);
-          const targetEl = document.elementFromPoint(cx, cy);
-          if (targetEl) {
-            simulateClick(targetEl, cx, cy);
-            typeIntoElement(targetEl, itemText);
-            count++;
-          }
-        }
-      }
-      return { success: true, message: `Batch typed ${count} form fields` };
     }
 
     if (actionType === "scroll") {
@@ -116,19 +196,6 @@ function inContentExecutor(actionData) {
       const dy = dir === "down" ? amount : (dir === "up" ? -amount : 0);
       window.scrollBy({ top: dy, behavior: "smooth" });
       return { success: true, message: `Scrolled ${dir} by ${amount}px` };
-    }
-
-    if (actionType === "key") {
-      const keyName = actionData.key || "Enter";
-      const active = document.activeElement || document.body;
-      active.dispatchEvent(new KeyboardEvent("keydown", { key: keyName, bubbles: true }));
-      active.dispatchEvent(new KeyboardEvent("keypress", { key: keyName, bubbles: true }));
-      active.dispatchEvent(new KeyboardEvent("keyup", { key: keyName, bubbles: true }));
-      return { success: true, message: `Pressed key '${keyName}'` };
-    }
-
-    if (actionType === "done") {
-      return { success: true, message: `Goal marked done: ${actionData.reasoning || ""}` };
     }
 
     return { success: true, message: `Action ${actionType} executed` };

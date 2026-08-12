@@ -1,80 +1,59 @@
-// extension/reasoner.js - Standalone In-Browser Vision LLM Reasoner
+// extension/reasoner.js - Lightweight Pure-DOM LLM Reasoner
 
 import { resolveField, getVaultContextString } from "./vault.js";
 
-const SYSTEM_PROMPT_TEMPLATE = `You are an Autonomous Visual Browser Agent. You MUST respond ONLY with a raw, valid JSON object. Do NOT wrap the response in markdown, backticks, or extra prose.
+const DOM_SYSTEM_PROMPT = `You are an Autonomous Lightweight Pure-DOM Form Auto-Filler Agent. You MUST respond ONLY with a raw, valid JSON object. Do NOT wrap the response in markdown, backticks, or extra prose.
 
 USER PROFILE VAULT CONTEXT:
 {vault_context}
 
 CRITICAL INSTRUCTIONS:
-1. Examine the screenshot for human intervention requirements first:
-   - Set 'human_required' to true if page presents an account login form, CAPTCHA puzzle, 2FA code prompt, or checkout payment screen. Set 'requirement_type' to 'login', 'captcha', '2fa', or 'payment'.
-2. If no human intervention is required, calculate center (x, y) coordinates for the next physical visual action:
-   - Coordinates are [0..1279 X, 0..799 Y].
-   - 'type': specify center (x, y) and 'text' value to type. Reference USER PROFILE VAULT CONTEXT.
-   - 'batch_type': if multiple input fields are visible on the page (e.g. forms, registration, checkout, multi-field tests), specify action 'batch_type' and provide 'batch_inputs' array containing all field entries \`[{"x": center_x, "y": center_y, "text": "profile_vault_key_or_value"}, ...]\` to fill out ALL form fields across the page in a single step! Match all detected form fields against USER PROFILE VAULT CONTEXT (First Name, Middle Name, Last Name, Full Name, Company, Address, City, Country, Phone, Email, etc.) in a unified plan.
-   - 'click': specify center (x, y).
-   - 'select': specify center (x, y) and 'value'.
-   - 'key': specify 'key' name ('Enter', 'Tab', 'Escape').
-   - 'scroll': set 'direction' ('down' / 'up').
-   - 'ask_human': choose if stuck or uncertain.
-   - 'done': choose when user objective is complete.
+1. Review the list of detected interactable form inputs from the webpage.
+2. Match each form input field (using label, placeholder, id, or name hints) against the USER PROFILE VAULT CONTEXT.
+3. Construct a mapping array 'fills' containing entries \`{"index": input_index, "vault_key": "attribute_name", "value": "attribute_value"}\`.
+4. If the user's objective requests submitting the form, set 'submit' to true. Otherwise set 'submit' to false.
 
 JSON Schema format:
 {
-  "reasoning": "Reasoning visual analysis here",
-  "human_required": false,
-  "requirement_type": null,
-  "action": "click",
-  "x": 640,
-  "y": 400,
-  "text": null,
-  "value": null,
-  "key": null,
-  "direction": null,
-  "batch_inputs": null
+  "thought": "Reasoning explanation of detected fields and vault attribute mapping...",
+  "fills": [
+    { "index": 0, "vault_key": "first_name", "value": "John" },
+    { "index": 1, "vault_key": "last_name", "value": "Doe" }
+  ],
+  "submit": false,
+  "action": "done"
 }
 `;
 
-export async function decideVisualStep({ goal, url, title, screenshotBase64, historySummary, vaultData }) {
+export async function decideDomStep({ goal, url, title, inputs, vaultData }) {
   const apiKey = vaultData.groq_api_key;
   if (!apiKey) {
-    throw new Error("Groq API Key is missing. Please save your API key in the Extension Settings tab.");
+    throw new Error("Groq API Key is missing. Please save your API key in Extension Settings tab.");
   }
 
-  const model = vaultData.groq_vision_model || "qwen/qwen3.6-27b";
+  const model = vaultData.groq_model || "llama-3.3-70b-versatile";
   const vaultContextStr = getVaultContextString(vaultData);
-  const systemPrompt = SYSTEM_PROMPT_TEMPLATE.replace("{vault_context}", vaultContextStr);
+  const systemPrompt = DOM_SYSTEM_PROMPT.replace("{vault_context}", vaultContextStr);
 
-  const formattedScreenshot = screenshotBase64.startsWith("data:") 
-    ? screenshotBase64 
-    : `data:image/png;base64,${screenshotBase64}`;
+  const inputsJsonStr = JSON.stringify(inputs, null, 2);
 
   const userMessage = `User Goal: "${goal}"
-Current Page URL: ${url || "N/A"}
-Current Page Title: ${title || "N/A"}
-Viewport Resolution: 1280x800
+Page URL: ${url || "N/A"}
+Page Title: ${title || "N/A"}
 
-Execution History (Last steps):
-${historySummary || "No previous steps."}
+Detected Web Form Inputs (${inputs.length} fields):
+${inputsJsonStr}
 
-Analyze the screenshot and output strictly valid JSON with reasoning and target action decision.`;
+Analyze the form inputs against the USER PROFILE VAULT CONTEXT and output strictly valid JSON matching the schema.`;
 
   const payload = {
     model: model,
     messages: [
       { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: userMessage },
-          { type: "image_url", image_url: { url: formattedScreenshot } }
-        ]
-      }
+      { role: "user", content: userMessage }
     ],
     temperature: 0.1,
-    max_tokens: 1024,
+    max_tokens: 2048,
     response_format: { type: "json_object" }
   };
 
@@ -109,18 +88,14 @@ Analyze the screenshot and output strictly valid JSON with reasoning and target 
     throw new Error(`Failed to parse LLM JSON response: ${rawContent}`);
   }
 
-  // Resolve Vault Fields automatically
-  if (decision.action === "type" && decision.text) {
-    const resolved = resolveField(decision.text, vaultData);
-    if (resolved) {
-      decision.text = resolved;
-    }
-  } else if (decision.action === "batch_type" && Array.isArray(decision.batch_inputs)) {
-    for (const item of decision.batch_inputs) {
-      if (item && item.text) {
-        const resolved = resolveField(item.text, vaultData);
+  // Resolve Vault Values for all items in fills
+  if (Array.isArray(decision.fills)) {
+    for (const item of decision.fills) {
+      if (item && (item.vault_key || item.value)) {
+        const queryKey = item.vault_key || item.value;
+        const resolved = resolveField(queryKey, vaultData);
         if (resolved) {
-          item.text = resolved;
+          item.value = resolved;
         }
       }
     }

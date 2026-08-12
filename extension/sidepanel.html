@@ -309,11 +309,11 @@
 
         <div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <label>Live Screen Telemetry</label>
-                <span class="badge">👁️ Visual</span>
+                <label>Form Telemetry Logs</label>
+                <span class="badge">⚡ Pure DOM</span>
             </div>
-            <div class="stream-container" id="streamContainer">
-                <span id="placeholderText" style="color:var(--text-secondary); font-size:10px;">Waiting for visual stream...</span>
+            <div class="stream-container" id="streamContainer" style="height: auto; min-height: 50px; padding: 12px; text-align: center;">
+                <span id="placeholderText" style="color:var(--text-secondary); font-size:11px;">⚡ Pure-DOM Mode Active (Zero Vision Overhead & Instant 1-Step Form Filling)</span>
                 <img id="streamImg" class="stream-img" style="display:none;" alt="Live View">
 
                 <div id="targetOverlayMarker" class="target-marker" style="display: none;">
@@ -339,8 +339,8 @@
             <label for="groqApiKey">Groq API Key</label>
             <input type="password" id="groqApiKey" placeholder="gsk_...">
 
-            <label for="groqModel">Vision Model</label>
-            <input type="text" id="groqModel" value="qwen/qwen3.6-27b">
+            <label for="groqModel">Groq Model</label>
+            <input type="text" id="groqModel" value="llama-3.3-70b-versatile">
         </div>
 
         <div class="card">
