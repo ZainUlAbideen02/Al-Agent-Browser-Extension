@@ -1,15 +1,12 @@
+# Dependencies & Output
+node_modules/
+.DS_Store
+*.log
 .env
-__pycache__/
-*.pyc
-logs/
-browser-agent/logs/
-browser-agent/sessions/
-browser-agent/downloads/
-.venv/
-env/
+.env.local
 
-# Sensitive user credential and session persistence data
-config/user_profile.json
-sessions/*.json
-sessions/
-downloads/
+# OS & Editor files
+.vscode/
+.idea/
+*.swp
+*.tmp
