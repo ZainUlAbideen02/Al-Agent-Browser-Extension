@@ -89,6 +89,42 @@ def execute_visual_action(
                 time.sleep(0.5)
                 return True, f"Typed '{text}'", False
 
+        elif action_type == "batch_type":
+            batch_inputs = action_data.get("batch_inputs") or []
+            if not batch_inputs:
+                return False, "Batch type action requires non-empty 'batch_inputs' array.", False
+
+            filled_count = 0
+            any_low_confidence = False
+            for item in batch_inputs:
+                if not isinstance(item, dict):
+                    continue
+                item_text = str(item.get("text") or item.get("value") or "")
+                item_x = item.get("x")
+                item_y = item.get("y")
+                item_sel = item.get("selector")
+
+                if item_x is not None and item_y is not None:
+                    cx, cy, lc = validate_and_clamp_coordinates(item_x, item_y, viewport_w, viewport_h)
+                    if lc:
+                        any_low_confidence = True
+                    controller.mouse_click(cx, cy, smooth=True)
+                    time.sleep(0.15)
+                    controller.key_press("Control+a")
+                    controller.key_press("Backspace")
+                    time.sleep(0.1)
+                    controller.keyboard_type(item_text)
+                    time.sleep(0.2)
+                    filled_count += 1
+                elif item_sel:
+                    controller.type_text(item_sel, item_text)
+                    time.sleep(0.2)
+                    filled_count += 1
+
+            time.sleep(0.5)
+            msg = f"Batch typed {filled_count} form fields successfully" + (" [low_confidence_prediction]" if any_low_confidence else "")
+            return True, msg, any_low_confidence
+
         elif action_type in ("key", "keyboard_press"):
             key_name = action_data.get("key") or action_data.get("text") or action_data.get("value", "Enter")
             controller.key_press(key_name)

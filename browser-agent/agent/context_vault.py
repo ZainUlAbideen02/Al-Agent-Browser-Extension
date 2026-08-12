@@ -10,7 +10,9 @@ DEFAULT_PROFILE_VAULT: Dict[str, Any] = {
     "full_name": "John Alexander Doe",
     "legal_name": "John Alexander Doe",
     "first_name": "John",
+    "middle_name": "Alexander",
     "last_name": "Doe",
+    "company": "Acme Corp",
     "roll_number": "STU-2026-8891",
     "student_roll_number": "STU-2026-8891",
     "email": "john.doe@example.com",
@@ -31,6 +33,10 @@ DEFAULT_PROFILE_VAULT: Dict[str, Any] = {
 
 # Alias dictionary mapping canonical profile keys to common search queries / form label hints
 FIELD_ALIAS_MAP: Dict[str, List[str]] = {
+    "first_name": ["first_name", "firstname", "given_name", "fname"],
+    "middle_name": ["middle_name", "middle_initial", "middle", "mid_name", "mname"],
+    "last_name": ["last_name", "lastname", "surname", "family_name", "lname"],
+    "company": ["company", "organization", "company_name", "employer", "business", "org"],
     "roll_number": [
         "roll_number", "roll_no", "roll", "student_id", "university_id",
         "reg_no", "registration_number", "student_roll_number", "id_number",
@@ -38,7 +44,7 @@ FIELD_ALIAS_MAP: Dict[str, List[str]] = {
     ],
     "full_name": [
         "full_name", "legal_name", "name", "student_name", "user_name",
-        "applicant_name", "first_name", "last_name", "your_name", "fullname"
+        "applicant_name", "your_name", "fullname"
     ],
     "email": [
         "email", "e_mail", "mail", "email_address", "contact_email", "user_email"

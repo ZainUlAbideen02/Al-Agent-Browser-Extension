@@ -21,7 +21,16 @@ class BaseAgent:
 
         self.text_model = text_model or DEFAULT_TEXT_MODEL
         self.vision_model = vision_model or DEFAULT_VISION_MODEL
-        
+
+        # Ordered fallback chain of vision-capable models to try before text-only degradation.
+        # Only qwen/qwen3.6-27b supports vision on this Groq account (confirmed via models.list()).
+        # Text-only fallback is used when vision quota is exhausted or unavailable.
+        self.vision_fallback_chain = [
+            self.vision_model,
+            # No additional vision models available on this account — falls through to text-only
+        ]
+        self._current_vision_model_idx = 0
+
         self.client = Groq(api_key=self.api_key)
 
     def _clean_json_text(self, text: str) -> str:
@@ -145,10 +154,37 @@ class BaseAgent:
                 last_error = str(e)
                 logger.warning(f"Groq API call attempt {attempt + 1} failed: {e}")
 
-                if "429" in last_error or "Rate limit" in last_error or "tokens" in last_error:
-                    backoff_time = 6.0 * (attempt + 1)
-                    logger.info(f"Groq API rate limit hit (429). Sleeping {backoff_time}s for rate limit bucket replenishment...")
-                    time.sleep(backoff_time)
+                # Catch rate-limits AND model-not-found (404) — both trigger chain traversal
+                should_chain = (
+                    is_vision and (
+                        "rate_limit" in str(e).lower()
+                        or "429" in str(e)
+                        or "limit reached" in str(e).lower()
+                        or "model_not_found" in str(e).lower()
+                        or "404" in str(e)
+                        or "does not exist" in str(e).lower()
+                    )
+                )
+                if should_chain:
+                    # Try next vision model in the fallback chain before dropping to text-only
+                    self._current_vision_model_idx += 1
+                    if self._current_vision_model_idx < len(self.vision_fallback_chain):
+                        next_vision = self.vision_fallback_chain[self._current_vision_model_idx]
+                        logger.warning(f"Vision model {model_name} rate limited. Trying next vision model: {next_vision}")
+                        model_name = next_vision
+                        continue
+                    else:
+                        # All vision models exhausted — fall back to text-only as last resort
+                        logger.warning(f"All vision models exhausted. Falling back to text model {self.text_model} (no image)...")
+                        is_vision = False
+                        model_name = self.text_model
+                        encoded_image = None
+                        self._current_vision_model_idx = 0  # reset for next call
+                        continue
+
+                backoff_time = 4.0 * (attempt + 1)
+                logger.info(f"Sleeping {backoff_time}s before retry (attempt {attempt + 1}/{max_retries + 1})...")
+                time.sleep(backoff_time)
 
                 if attempt == max_retries:
                     raise RuntimeError(

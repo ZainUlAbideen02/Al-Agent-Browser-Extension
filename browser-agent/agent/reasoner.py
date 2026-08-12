@@ -24,7 +24,7 @@ class PureVisualStepDecision(BaseModel):
         default=None,
         description="Type of human intervention if human_required is True."
     )
-    action: Literal["click", "type", "select", "key", "scroll", "download", "ask_human", "done"] = Field(
+    action: Literal["click", "type", "batch_type", "select", "key", "scroll", "download", "ask_human", "done"] = Field(
         ...,
         description="The physical visual action to execute."
     )
@@ -35,6 +35,7 @@ class PureVisualStepDecision(BaseModel):
     value: Optional[str] = Field(None)
     key: Optional[str] = Field(None)
     direction: Optional[Literal["up", "down", "left", "right"]] = Field(None)
+    batch_inputs: Optional[List[Dict[str, Any]]] = Field(None, description="List of form input fields to batch fill in a single step e.g. [{'x': 100, 'y': 200, 'text': 'john.doe@example.com'}]")
 
 class PureVisualActionDecision(PureVisualStepDecision):
     """Alias for backwards compatibility."""
@@ -97,6 +98,7 @@ CRITICAL INSTRUCTIONS:
 2. If no human intervention is required, calculate center (x, y) coordinates for the next physical visual action:
    - Overlay grid with 100px red lines & labels (e.g. '100,200') is rendered on the image to help calculate exact coordinates [0..1279 X, 0..799 Y].
    - 'type': specify center (x, y) and 'text' value to type. Reference USER PROFILE VAULT CONTEXT.
+   - 'batch_type': if multiple input fields are visible on the page (e.g. forms, registration, checkout, multi-field tests), specify action 'batch_type' and provide 'batch_inputs' array containing all field entries `[{"x": center_x, "y": center_y, "text": "profile_vault_key_or_value"}, ...]` to fill out ALL form fields across the page in a single step! Match all detected form fields against USER PROFILE VAULT CONTEXT (First Name, Middle Name, Last Name, Full Name, Company, Address, City, Country, Phone, Email, etc.) in a unified plan.
    - 'click': specify center (x, y).
    - 'select': specify center (x, y) and 'value'.
    - 'key': specify 'key' name ('Enter', 'Tab', 'Escape').
@@ -109,16 +111,19 @@ CRITICAL INSTRUCTIONS:
   "reasoning": "<visual analysis>",
   "human_required": true | false,
   "requirement_type": "login" | "captcha" | "2fa" | "payment" | null,
-  "action": "click" | "type" | "select" | "key" | "scroll" | "download" | "ask_human" | "done",
+  "action": "click" | "type" | "batch_type" | "select" | "key" | "scroll" | "download" | "ask_human" | "done",
   "x": 640 or null,
   "y": 400 or null,
   "text": "string" or null,
   "value": "string" or null,
   "key": "Enter" or null,
-  "direction": "down" or null
+  "direction": "down" or null,
+  "batch_inputs": [{"x": 100, "y": 200, "text": "value"}] or null
 }}
 Do NOT output any markdown formatting or extra text outside the JSON object.
 """
+
+SYSTEM_PROMPT_VISUAL = SYSTEM_PROMPT_UNIFIED
 
 SYSTEM_PROMPT_HUMAN_DETECT = """You are a visual browser security and authentication detector. Examine the page screenshot to determine if a human user is required to intervene.
 
@@ -223,6 +228,82 @@ class ReasonerAgent(BaseAgent):
         super().__init__(api_key=api_key, text_model=text_model, vision_model=vision_model)
         self.vault = vault or ContextVault()
 
+    def _decide_step_dom_fallback(
+        self,
+        goal: str,
+        visual_state: Dict[str, Any],
+        history_summary: str
+    ) -> Dict[str, Any]:
+        """
+        DOM-aware text-only fallback used when vision quota is exhausted.
+        Uses page URL, title, and vault context to produce a valid coordinate action
+        without requiring a screenshot. Coordinates are based on known page layouts.
+        """
+        vault_context = self.vault.get_context_for_prompt()
+        current_url = visual_state.get("current_url", "N/A")
+        page_title = visual_state.get("page_title", "N/A")
+        vw = visual_state.get("viewport_width", 1280)
+        vh = visual_state.get("viewport_height", 800)
+
+        dom_system_prompt = f"""You are a browser automation agent. Vision is unavailable.
+Use your knowledge of common web page layouts and the page URL/title to determine the next action.
+
+USER PROFILE VAULT CONTEXT:
+{vault_context}
+
+Rules:
+- For login pages: type username at approx (640, 330), type password at approx (640, 395), click Login/Submit at approx (640, 450).
+- Use vault context for username/password values.
+- Choose action=done only when goal is fully achieved based on history.
+- Output ONLY valid JSON, no markdown.
+
+JSON schema:
+{{
+  "reasoning": "<why this action>",
+  "human_required": false,
+  "requirement_type": null,
+  "action": "click" | "type" | "key" | "scroll" | "done",
+  "x": null,
+  "y": null,
+  "text": null,
+  "value": null,
+  "key": null,
+  "direction": null
+}}"""
+
+        dom_user_message = (
+            f"Goal: \"{goal}\"\n"
+            f"Page URL: {current_url}\n"
+            f"Page Title: {page_title}\n"
+            f"Viewport: {vw}x{vh}\n"
+            f"History:\n{history_summary}\n\n"
+            "Vision model is unavailable (quota exhausted). "
+            "Use page URL/title and vault context to decide the next best action. "
+            "Output strictly valid JSON."
+        )
+
+        logger.warning("Vision unavailable - using DOM-aware text-only fallback for step decision.")
+        raw = self.call_llm(
+            system_prompt=dom_system_prompt,
+            user_message=dom_user_message,
+            expect_json=True,
+            image_path=None
+        )
+        decision_obj = PureVisualStepDecision(**raw)
+        result = decision_obj.model_dump()
+
+        if result["action"] == "type" and result.get("text"):
+            resolved = self.vault.resolve_field(result["text"])
+            if resolved:
+                logger.info(f"[DOM Fallback] Resolved vault field '{result['text']}' -> '{resolved}'")
+                result["text"] = resolved
+
+        logger.info(
+            f"[DOM Fallback] Action={result['action']} | Coords=({result.get('x')}, {result.get('y')}) | "
+            f"Reasoning: {result['reasoning'][:60]}..."
+        )
+        return result
+
     def decide_visual_step(
         self,
         goal: str,
@@ -271,6 +352,13 @@ Output strictly valid JSON matching schema.
                     if resolved:
                         logger.info(f"Resolved vault field text '{result['text']}' -> '{resolved}'")
                         result["text"] = resolved
+                elif result["action"] == "batch_type" and result.get("batch_inputs"):
+                    for item in result["batch_inputs"]:
+                        if isinstance(item, dict) and item.get("text"):
+                            resolved = self.vault.resolve_field(item["text"])
+                            if resolved:
+                                logger.info(f"Resolved batch vault field text '{item['text']}' -> '{resolved}'")
+                                item["text"] = resolved
 
                 logger.info(
                     f"Unified Visual Step Decision: HumanReq={result.get('human_required')} | "
@@ -281,10 +369,23 @@ Output strictly valid JSON matching schema.
             except ValidationError as ve:
                 logger.warning(f"Pydantic Unified Visual validation failed (attempt {attempt + 1}): {ve}")
                 if attempt == max_retries:
-                    raise RuntimeError(f"Unified visual step decision failed validation: {ve}") from ve
+                    logger.warning("All visual attempts failed validation - trying DOM-aware fallback...")
+                    try:
+                        return self._decide_step_dom_fallback(goal, visual_state, history_summary)
+                    except Exception as dom_err:
+                        logger.error(f"DOM fallback also failed: {dom_err}")
+                        raise RuntimeError(f"Unified visual step decision failed validation: {ve}") from ve
                 user_message += f"\n\n[VALIDATION ERROR: {ve}. Output valid JSON with fields: reasoning, human_required, action, x, y, text, key.]"
             except Exception as e:
-                logger.error(f"Error in unified visual step decision: {e}")
+                error_str = str(e)
+                logger.error(f"Error in unified visual step decision: {error_str}")
+                if ("rate_limit" in error_str.lower() or "429" in error_str or
+                        "limit reached" in error_str.lower() or "quota" in error_str.lower()):
+                    logger.warning("Vision quota exhausted - trying DOM-aware fallback...")
+                    try:
+                        return self._decide_step_dom_fallback(goal, visual_state, history_summary)
+                    except Exception as dom_err:
+                        logger.error(f"DOM fallback also failed: {dom_err}")
                 raise
 
         raise RuntimeError("Failed to generate valid unified visual step decision.")

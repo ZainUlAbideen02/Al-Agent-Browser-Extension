@@ -17,6 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let ws = null;
     let activeWidth = 1280;
     let activeHeight = 800;
+    let wsEndpoints = ["ws://localhost:8000/ws/telemetry", "ws://127.0.0.1:8000/ws/telemetry"];
+    let currentEndpointIndex = 0;
+    let reconnectTimeout = null;
 
     // Auto-detect current active tab URL in Chrome Extension environment
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
@@ -27,22 +30,50 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function setStatus(connected, message) {
+        if (connected) {
+            statusDot.className = "status-dot connected";
+            statusDot.style.background = "#22c55e";
+            statusText.textContent = message || "Connected";
+        } else {
+            statusDot.className = "status-dot disconnected";
+            statusDot.style.background = "#ef4444";
+            statusText.textContent = message || "Disconnected";
+        }
+    }
+
     function connectWebSocket() {
-        ws = new WebSocket("ws://localhost:8000/ws/telemetry");
+        if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+            return;
+        }
+
+        const endpoint = wsEndpoints[currentEndpointIndex];
+        try {
+            ws = new WebSocket(endpoint);
+        } catch (err) {
+            console.warn(`WebSocket creation failed for ${endpoint}:`, err);
+            setStatus(false, "Disconnected");
+            switchEndpointAndRetry();
+            return;
+        }
 
         ws.onopen = () => {
-            statusDot.className = "status-dot connected";
-            statusText.textContent = "Connected";
+            console.log(`WebSocket connected to ${endpoint}`);
+            setStatus(true, "Connected");
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
         };
 
         ws.onclose = () => {
-            statusDot.className = "status-dot disconnected";
-            statusText.textContent = "Disconnected";
-            setTimeout(connectWebSocket, 3000);
+            setStatus(false, "Disconnected");
+            switchEndpointAndRetry();
         };
 
         ws.onerror = (e) => {
-            console.error("Extension WebSocket error:", e);
+            console.warn(`WebSocket connection error on ${endpoint}:`, e);
+            setStatus(false, "Disconnected");
         };
 
         ws.onmessage = (event) => {
@@ -53,6 +84,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.error("Error parsing telemetry frame:", err);
             }
         };
+    }
+
+    function switchEndpointAndRetry() {
+        if (reconnectTimeout) return;
+        currentEndpointIndex = (currentEndpointIndex + 1) % wsEndpoints.length;
+        reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            connectWebSocket();
+        }, 3000);
     }
 
     connectWebSocket();
@@ -77,13 +117,24 @@ document.addEventListener("DOMContentLoaded", () => {
         startBtn.textContent = "⏳ Running...";
 
         try {
-            const response = await fetch("http://localhost:8000/api/agent/start", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
+            const apiEndpoints = ["http://localhost:8000/api/agent/start", "http://127.0.0.1:8000/api/agent/start"];
+            let response = null;
+            let lastErr = null;
 
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            for (const ep of apiEndpoints) {
+                try {
+                    response = await fetch(ep, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response && response.ok) break;
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+
+            if (!response || !response.ok) throw new Error(lastErr ? lastErr.message : `HTTP ${response ? response.status : 'error'}`);
             logContainer.innerHTML = "";
 
         } catch (err) {
@@ -121,37 +172,65 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderFrame(frame) {
         if (!frame) return;
 
+        // 1. Handle live screenshot stream
         if (frame.screenshot_base64) {
-            placeholderText.style.display = "none";
-            streamImg.style.display = "block";
-            streamImg.src = frame.screenshot_base64;
-            setTimeout(() => {
-                updateCoordinateOverlay(frame.x, frame.y);
-            }, 80);
+            if (placeholderText) placeholderText.style.display = "none";
+            if (streamImg) {
+                streamImg.style.display = "block";
+                streamImg.src = frame.screenshot_base64.startsWith("data:") 
+                    ? frame.screenshot_base64 
+                    : `data:image/png;base64,${frame.screenshot_base64}`;
+            }
         }
 
-        if (logContainer.querySelector("div[style*='text-align:center']")) {
-            logContainer.innerHTML = "";
+        // 2. Handle crosshair coordinate marker
+        if (frame.x !== undefined && frame.x !== null && frame.y !== undefined && frame.y !== null) {
+            if (targetOverlayMarker) {
+                targetOverlayMarker.style.display = "flex";
+                // Map relative coordinates if resolution metadata is present
+                const rescaleX = (frame.x / activeWidth) * 100;
+                const rescaleY = (frame.y / activeHeight) * 100;
+                targetOverlayMarker.style.left = `${rescaleX}%`;
+                targetOverlayMarker.style.top = `${rescaleY}%`;
+            }
+            if (markerLabel) {
+                const actionText = (frame.action || "TARGET").toString().toUpperCase();
+                markerLabel.textContent = `${actionText} (${frame.x}, ${frame.y})`;
+            }
         }
 
-        const item = document.createElement("div");
-        item.className = "log-item";
+        // 3. Handle step logging (Safe Null-Check on .toUpperCase())
+        if (frame.step_num || frame.thought || frame.action) {
+            if (logContainer.querySelector("div[style*='text-align:center']")) {
+                logContainer.innerHTML = "";
+            }
+            const logItem = document.createElement("div");
+            logItem.className = "log-item";
+            
+            // SAFE .toUpperCase() EVALUATION:
+            const safeAction = (frame.action || "INFO").toString().toUpperCase();
+            const safeMode = (frame.mode || "VISUAL").toString().toUpperCase();
+            const safeThought = frame.thought || frame.message || frame.reasoning || "Executing action...";
 
-        const coordsStr = (frame.x !== null && frame.x !== undefined) ? ` (${frame.x}, ${frame.y})` : "";
+            logItem.innerHTML = `
+                <div class="log-item-header">
+                    <span>STEP ${frame.step_num || '-'}: ${safeAction}</span>
+                    <span class="badge badge-vision">${safeMode}</span>
+                </div>
+                <div style="color:var(--text-primary); font-size:11px;">💡 ${safeThought}</div>
+            `;
+            
+            if (logContainer) {
+                logContainer.prepend(logItem);
+            }
+        }
 
-        item.innerHTML = `
-            <div class="log-item-header">
-                <span>STEP ${frame.step_num}: ${frame.action.toUpperCase()}${coordsStr}</span>
-                <span class="badge badge-vision">👁️ Visual</span>
-            </div>
-            <div style="color:var(--text-primary); font-size:11px;">💡 ${frame.thought || frame.reasoning || "Action executed"}</div>
-        `;
-
-        logContainer.prepend(item);
-
-        if (frame.action === "done") {
-            startBtn.disabled = false;
-            startBtn.textContent = "▶ Run Visual Agent";
+        // 4. Reset Start Button on Task Done / Failed
+        if (frame.action === "done" || frame.status === "completed" || frame.status === "failed") {
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = "▶ Run Visual Agent";
+            }
         }
     }
 });

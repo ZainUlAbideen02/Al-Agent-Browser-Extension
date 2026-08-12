@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 logs/
+browser-agent/logs/
+browser-agent/sessions/
+browser-agent/downloads/
 .venv/
 env/
 

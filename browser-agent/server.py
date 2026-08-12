@@ -84,14 +84,16 @@ def sync_step_callback(frame_data: Dict[str, Any]):
     global loop_handle
     if loop_handle and loop_handle.is_running():
         frame_data["event"] = "step_update"
-        if "thought" not in frame_data:
-            frame_data["thought"] = frame_data.get("reasoning", "")
+        frame_data["action"] = frame_data.get("action") or "step"
+        frame_data["mode"] = frame_data.get("mode") or "visual"
+        frame_data["thought"] = frame_data.get("thought") or frame_data.get("reasoning") or "Processing action..."
+        frame_data["status"] = frame_data.get("status") or "running"
         asyncio.run_coroutine_threadsafe(manager.broadcast(frame_data), loop_handle)
 
 class StartAgentRequest(BaseModel):
     url: str = Field(..., example="https://the-internet.herokuapp.com/login")
     goal: str = Field(..., example="Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button")
-    max_steps: int = Field(default=30, ge=1, le=60)
+    max_steps: int = Field(default=50, ge=1, le=100)
     width: int = Field(default=1280, ge=640, le=2560)
     height: int = Field(default=800, ge=480, le=1440)
     mode: str = Field(default="visual", example="visual")
@@ -131,6 +133,10 @@ def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, width:
                 manager.broadcast({
                     "event": "task_completed",
                     "task_id": task_id,
+                    "action": "done",
+                    "mode": mode or "visual",
+                    "thought": "Task completed successfully",
+                    "status": "completed",
                     "summary": summary
                 }),
                 loop_handle
@@ -144,6 +150,10 @@ def execute_agent_task(task_id: str, goal: str, url: str, max_steps: int, width:
                 manager.broadcast({
                     "event": "task_failed",
                     "task_id": task_id,
+                    "action": "failed",
+                    "mode": mode or "visual",
+                    "thought": f"Task failed: {e}",
+                    "status": "failed",
                     "error": str(e)
                 }),
                 loop_handle

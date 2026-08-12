@@ -100,6 +100,10 @@ class BrowserController:
         logger.info(f"Saved session storage state to {session_file}")
         return str(session_file)
 
+    def initialize(self, headless: bool = False, session_file: Optional[str] = None) -> None:
+        """Alias for start() method to initialize browser context or attach via CDP."""
+        self.start(headless=headless, session_file=session_file)
+
     def start(self, headless: bool = False, session_file: Optional[str] = None) -> None:
         """Launch Playwright browser session locked to 1280x800 viewport with optional session state."""
         self._headless = headless
@@ -110,25 +114,49 @@ class BrowserController:
             f"session={session_file or 'None'}, timeout={self.default_timeout_ms}ms)..."
         )
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(
-            headless=headless,
-            args=[
-                f"--window-size={self.width},{self.height}",
-                "--disable-blink-features=AutomationControlled"
-            ]
-        )
 
-        context_kwargs = {
-            "viewport": {"width": self.width, "height": self.height},
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        # CDP Connection Fallback to attach to active Chrome browser tab (remote debugging port 9222)
+        cdp_url = os.getenv("CDP_URL", "http://localhost:9222")
+        attached_via_cdp = False
 
-        if session_file and Path(session_file).exists():
-            context_kwargs["storage_state"] = session_file
-            logger.info(f"Loaded existing session storage state from {session_file}")
+        try:
+            logger.info(f"Attempting to attach to active Chrome browser via CDP at {cdp_url}...")
+            self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
+            contexts = self._browser.contexts
+            if contexts:
+                self.context = contexts[0]
+                pages = self.context.pages
+                self._page = pages[0] if pages else self.context.new_page()
+            else:
+                self.context = self._browser.new_context(viewport={"width": self.width, "height": self.height})
+                self._page = self.context.new_page()
 
-        self.context = self._browser.new_context(**context_kwargs)
-        self._page = self.context.new_page()
+            attached_via_cdp = True
+            logger.info(f"✅ Successfully attached Playwright to active Chrome browser via CDP at {cdp_url}!")
+        except Exception as cdp_err:
+            logger.info(f"CDP connection to {cdp_url} not available ({cdp_err}). Launching isolated Chromium instance...")
+
+        if not attached_via_cdp:
+            self._browser = self._playwright.chromium.launch(
+                headless=headless,
+                args=[
+                    f"--window-size={self.width},{self.height}",
+                    "--disable-blink-features=AutomationControlled"
+                ]
+            )
+
+            context_kwargs = {
+                "viewport": {"width": self.width, "height": self.height},
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+
+            if session_file and Path(session_file).exists():
+                context_kwargs["storage_state"] = session_file
+                logger.info(f"Loaded existing session storage state from {session_file}")
+
+            self.context = self._browser.new_context(**context_kwargs)
+            self._page = self.context.new_page()
+
         self._page.set_viewport_size({"width": self.width, "height": self.height})
         self._page.set_default_timeout(self.default_timeout_ms)
         self._page.set_default_navigation_timeout(self.default_timeout_ms)
