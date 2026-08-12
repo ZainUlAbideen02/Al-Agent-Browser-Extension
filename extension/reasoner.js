@@ -2,7 +2,7 @@
 
 import { resolveField, getVaultContextString } from "./vault.js";
 
-const SYSTEM_PROMPT_TEMPLATE = `You are a pure visual computer-use agent controlling a web browser strictly via screenshots at 1280x800 resolution.
+const SYSTEM_PROMPT_TEMPLATE = `You are an Autonomous Visual Browser Agent. You MUST respond ONLY with a raw, valid JSON object. Do NOT wrap the response in markdown, backticks, or extra prose.
 
 USER PROFILE VAULT CONTEXT:
 {vault_context}
@@ -20,21 +20,21 @@ CRITICAL INSTRUCTIONS:
    - 'scroll': set 'direction' ('down' / 'up').
    - 'ask_human': choose if stuck or uncertain.
    - 'done': choose when user objective is complete.
-3. Output strictly valid JSON matching schema:
+
+JSON Schema format:
 {
-  "reasoning": "<visual analysis>",
+  "reasoning": "Reasoning visual analysis here",
   "human_required": false,
   "requirement_type": null,
-  "action": "click" | "type" | "batch_type" | "select" | "key" | "scroll" | "ask_human" | "done",
+  "action": "click",
   "x": 640,
   "y": 400,
-  "text": "string or null",
-  "value": "string or null",
-  "key": "Enter or null",
-  "direction": "down or null",
-  "batch_inputs": [{"x": 100, "y": 200, "text": "value"}]
+  "text": null,
+  "value": null,
+  "key": null,
+  "direction": null,
+  "batch_inputs": null
 }
-Do NOT output markdown codeblocks around JSON or any commentary outside the JSON object.
 `;
 
 export async function decideVisualStep({ goal, url, title, screenshotBase64, historySummary, vaultData }) {
@@ -93,15 +93,18 @@ Analyze the screenshot and output strictly valid JSON with reasoning and target 
   }
 
   const resJson = await response.json();
-  const rawContent = resJson.choices?.[0]?.message?.content;
+  let rawContent = resJson.choices?.[0]?.message?.content;
   if (!rawContent) {
     throw new Error("Groq API returned empty response.");
   }
 
   let decision;
   try {
-    const cleanJson = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
-    decision = JSON.parse(cleanJson);
+    rawContent = rawContent.trim();
+    if (rawContent.startsWith("```")) {
+      rawContent = rawContent.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+    }
+    decision = JSON.parse(rawContent);
   } catch (parseErr) {
     throw new Error(`Failed to parse LLM JSON response: ${rawContent}`);
   }

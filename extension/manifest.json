@@ -4,12 +4,11 @@
   "version": "2.0.0",
   "description": "100% Standalone, Browser-Native AI Computer-Use Agent and Form Auto-Filler.",
   "permissions": [
-    "sidePanel",
-    "storage",
-    "activeTab",
     "scripting",
-    "debugger",
-    "tabs"
+    "storage",
+    "sidePanel",
+    "tabs",
+    "debugger"
   ],
   "host_permissions": [
     "https://api.groq.com/*",
