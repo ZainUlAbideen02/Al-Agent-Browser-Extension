@@ -1,29 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "AI Browser Agent SidePanel",
-  "version": "1.0.0",
-  "description": "Live real-time monitoring and side-panel control for Hybrid AI Browser Agent.",
+  "name": "Antigravity Visual Browser Agent",
+  "version": "2.0.0",
+  "description": "100% Standalone, Browser-Native AI Computer-Use Agent and Form Auto-Filler.",
   "permissions": [
     "sidePanel",
     "storage",
     "activeTab",
     "scripting",
+    "debugger",
     "tabs"
   ],
   "host_permissions": [
-    "http://localhost:8000/*",
-    "ws://localhost:8000/*",
-    "http://127.0.0.1:8000/*",
-    "ws://127.0.0.1:8000/*"
+    "https://api.groq.com/*",
+    "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "side_panel": {
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "Open AI Browser Agent Panel"
+    "default_title": "Open Visual Agent Side Panel"
   },
   "icons": {
     "16": "icon.png",

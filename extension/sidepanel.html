@@ -12,8 +12,8 @@
             --text-secondary: #94a3b8;
             --primary: #3b82f6;
             --success: #10b981;
-            --vision-color: #8b5cf6;
             --danger: #ef4444;
+            --accent: #8b5cf6;
         }
 
         body {
@@ -24,8 +24,8 @@
             padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            font-size: 13px;
+            gap: 10px;
+            font-size: 12px;
         }
 
         .header {
@@ -34,82 +34,123 @@
             justify-content: space-between;
             background: var(--panel-bg);
             border: 1px solid var(--border-color);
-            padding: 10px 12px;
+            padding: 8px 12px;
             border-radius: 8px;
         }
 
         .title {
             font-weight: 700;
-            font-size: 14px;
+            font-size: 13px;
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            background: var(--panel-bg);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
         }
 
-        .status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
-        .status-dot.disconnected { background: var(--danger); }
+        .nav-btn {
+            flex: 1;
+            padding: 6px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .nav-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
 
         .card {
             background: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 12px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
 
         label {
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 10px;
+            font-weight: 700;
             color: var(--text-secondary);
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         input, textarea, select {
             background: #090d16;
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 8px;
+            padding: 6px 8px;
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 11px;
             outline: none;
             width: 100%;
             box-sizing: border-box;
         }
 
-        button {
+        input:focus, textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        button.btn-primary {
             background: var(--primary);
             color: white;
             border: none;
-            padding: 9px;
+            padding: 8px;
             border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
             width: 100%;
+            font-size: 11px;
+        }
+
+        button.btn-danger {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 11px;
         }
 
         button:hover { opacity: 0.9; }
 
-        .badge {
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 600;
-        }
-
-        .badge-vision { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid #8b5cf6; }
-
         .stream-container {
             width: 100%;
-            height: 200px;
+            height: 180px;
             background: #000;
             border-radius: 6px;
             display: flex;
@@ -126,7 +167,6 @@
             object-fit: contain;
         }
 
-        /* Pulsing Crosshair Target Overlay */
         .target-marker {
             position: absolute;
             transform: translate(-50%, -50%);
@@ -136,139 +176,243 @@
 
         .crosshair-h {
             position: absolute;
-            width: 24px;
+            width: 20px;
             height: 2px;
             background: #ef4444;
-            left: -12px;
+            left: -10px;
             top: -1px;
-            box-shadow: 0 0 6px #ef4444;
         }
 
         .crosshair-v {
             position: absolute;
             width: 2px;
-            height: 24px;
+            height: 20px;
             background: #ef4444;
             left: -1px;
-            top: -12px;
-            box-shadow: 0 0 6px #ef4444;
+            top: -10px;
         }
 
         .marker-pulse {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border: 2px solid #ef4444;
             border-radius: 50%;
             position: absolute;
-            left: -10px;
-            top: -10px;
-            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            left: -8px;
+            top: -8px;
+            animation: pulse 1.5s infinite;
         }
 
         .marker-label {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 8px;
+            left: 8px;
             background: rgba(15, 23, 42, 0.9);
             color: #38bdf8;
-            padding: 2px 6px;
+            padding: 2px 4px;
             border-radius: 4px;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
             border: 1px solid #38bdf8;
             white-space: nowrap;
         }
 
-        @keyframes pulse-ring {
+        @keyframes pulse {
             0% { transform: scale(0.6); opacity: 1; }
             100% { transform: scale(1.8); opacity: 0; }
         }
 
         .log-container {
-            max-height: 200px;
+            max-height: 180px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
 
         .log-item {
             background: #090d16;
             border: 1px solid var(--border-color);
-            padding: 8px;
+            padding: 6px 8px;
             border-radius: 6px;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 2px;
         }
 
-        .log-item-header {
+        .log-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
+        }
+
+        .badge {
+            padding: 1px 4px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            background: rgba(139, 92, 246, 0.2);
+            color: #c084fc;
+            border: 1px solid #8b5cf6;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
         }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="title">
-            <span>👁️ Visual Agent Monitor</span>
+            <span>🔥 Antigravity Agent</span>
         </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-            <span class="status-dot disconnected" id="statusDot"></span>
-            <span id="statusText" style="font-size:11px; color:var(--text-secondary);">Disconnected</span>
+        <span style="font-size:10px; color:var(--success); font-weight:700;">● Standalone Engine</span>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <button class="nav-btn active" id="tabNavControl">⚡ Live Agent</button>
+        <button class="nav-btn" id="tabNavVault">🔑 Vault & Settings</button>
+    </div>
+
+    <!-- TAB 1: LIVE AGENT TELEMETRY -->
+    <div class="tab-content active" id="tabContentControl">
+        <div class="card">
+            <label for="targetUrl">Target Tab URL</label>
+            <input type="text" id="targetUrl" placeholder="Auto-detected active tab URL...">
+
+            <label for="goal">Objective Goal</label>
+            <textarea id="goal" rows="2" placeholder="Describe objective on active tab...">Fill out form fields with my profile data and submit</textarea>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+                <div>
+                    <label for="resolution">Resolution</label>
+                    <select id="resolution">
+                        <option value="1280x800">1280 x 800</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="maxSteps">Max Steps</label>
+                    <input type="number" id="maxSteps" value="50" min="1" max="100">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-primary" id="startBtn">▶ Run Visual Agent</button>
+                <button class="btn-danger" id="stopBtn" style="display:none;">⏹ Stop</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label>Live Screen Telemetry</label>
+                <span class="badge">👁️ Visual</span>
+            </div>
+            <div class="stream-container" id="streamContainer">
+                <span id="placeholderText" style="color:var(--text-secondary); font-size:10px;">Waiting for visual stream...</span>
+                <img id="streamImg" class="stream-img" style="display:none;" alt="Live View">
+
+                <div id="targetOverlayMarker" class="target-marker" style="display: none;">
+                    <div class="crosshair-h"></div>
+                    <div class="crosshair-v"></div>
+                    <div class="marker-pulse"></div>
+                    <div class="marker-label" id="markerLabel">(0, 0)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <label>Execution Logs</label>
+            <div class="log-container" id="logContainer">
+                <div style="color:var(--text-secondary); font-size:10px; text-align:center; padding:8px;">No activity logged.</div>
+            </div>
         </div>
     </div>
 
-    <div class="card">
-        <label for="targetUrl">Target URL</label>
-        <input type="text" id="targetUrl" placeholder="Auto-detected active tab URL...">
+    <!-- TAB 2: PROFILE VAULT & SETTINGS -->
+    <div class="tab-content" id="tabContentVault">
+        <div class="card">
+            <label for="groqApiKey">Groq API Key</label>
+            <input type="password" id="groqApiKey" placeholder="gsk_...">
 
-        <label for="goal">Objective</label>
-        <textarea id="goal" rows="2" placeholder="Goal for active tab...">Type 'tomsmith' into Username field, 'SuperSecretPassword!' into Password field, and click Login button</textarea>
-        
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
-            <div>
-                <label for="resolution">Resolution</label>
-                <select id="resolution">
-                    <option value="1280x800">1280 x 800</option>
-                    <option value="1920x1080">1920 x 1080</option>
-                </select>
-            </div>
-            <div>
-                <label for="maxSteps">Max Steps</label>
-                <input type="number" id="maxSteps" value="50" min="1" max="100">
-            </div>
+            <label for="groqModel">Vision Model</label>
+            <input type="text" id="groqModel" value="qwen/qwen3.6-27b">
         </div>
 
-        <button id="startBtn">▶ Run Visual Agent</button>
-    </div>
-
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label>Live Stream & Crosshair Overlay</label>
-            <span class="badge badge-vision">👁️ Visual Agent Active</span>
-        </div>
-        <div class="stream-container" id="streamContainer">
-            <span id="placeholderText" style="color:var(--text-secondary); font-size:11px;">Waiting for stream...</span>
-            <img id="streamImg" class="stream-img" style="display:none;" alt="Live View">
-
-            <!-- Pulsing Crosshair Target Marker Overlay -->
-            <div id="targetOverlayMarker" class="target-marker" style="display: none;">
-                <div class="crosshair-h"></div>
-                <div class="crosshair-v"></div>
-                <div class="marker-pulse"></div>
-                <div class="marker-label" id="markerLabel">(0, 0)</div>
+        <div class="card">
+            <label>User Profile Vault Attributes</label>
+            <div class="form-grid">
+                <div>
+                    <label for="v_first_name">First Name</label>
+                    <input type="text" id="v_first_name">
+                </div>
+                <div>
+                    <label for="v_middle_name">Middle Name</label>
+                    <input type="text" id="v_middle_name">
+                </div>
+                <div>
+                    <label for="v_last_name">Last Name</label>
+                    <input type="text" id="v_last_name">
+                </div>
+                <div>
+                    <label for="v_company">Company</label>
+                    <input type="text" id="v_company">
+                </div>
             </div>
-        </div>
-    </div>
 
-    <div class="card">
-        <label>Execution History</label>
-        <div class="log-container" id="logContainer">
-            <div style="color:var(--text-secondary); font-size:11px; text-align:center; padding:12px;">No activity logged.</div>
+            <label for="v_full_name">Full Name</label>
+            <input type="text" id="v_full_name">
+
+            <div class="form-grid">
+                <div>
+                    <label for="v_email">Email</label>
+                    <input type="email" id="v_email">
+                </div>
+                <div>
+                    <label for="v_phone">Phone</label>
+                    <input type="text" id="v_phone">
+                </div>
+            </div>
+
+            <label for="v_address">Street Address</label>
+            <input type="text" id="v_address">
+
+            <div class="form-grid">
+                <div>
+                    <label for="v_city">City</label>
+                    <input type="text" id="v_city">
+                </div>
+                <div>
+                    <label for="v_state">State</label>
+                    <input type="text" id="v_state">
+                </div>
+                <div>
+                    <label for="v_zip_code">Zip Code</label>
+                    <input type="text" id="v_zip_code">
+                </div>
+                <div>
+                    <label for="v_country">Country</label>
+                    <input type="text" id="v_country">
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div>
+                    <label for="v_username">Username</label>
+                    <input type="text" id="v_username">
+                </div>
+                <div>
+                    <label for="v_password">Password</label>
+                    <input type="password" id="v_password">
+                </div>
+            </div>
+
+            <button class="btn-primary" id="saveVaultBtn" style="margin-top:6px;">💾 Save Vault Settings</button>
+            <span id="saveStatusText" style="font-size:10px; color:var(--success); text-align:center; display:none;">Saved!</span>
         </div>
     </div>
 
